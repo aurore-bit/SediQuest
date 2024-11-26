@@ -1,2 +1,4 @@
-TO RUN:
-
+For mapping
+snakemake map_all snakefile pipeline.local.smk --config.file config/config.yaml --cores 25 
+For processing
+snakemake processing  snakefile pipeline.local.smk --config.file config/config.yaml --cores 25
