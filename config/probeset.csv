@@ -1,0 +1,3 @@
+probeset	path_to_ref	path_to_bed
+ssAA204	/mnt/expressions/benjamin_vernot/soil_capture_2017/site_categories_for_capture/custom_fasta_files/modified_hg19/probes_reich_n3_b8_third_allele/bwa-0.4.9	/mnt/expressions/benjamin_vernot/soil_capture_2017/site_categories_for_capture/soil_probe_designs/probes_reich_n3_b8_CONTROL_BV09-BV09.txt.gz.bam_sorted.bed
+#1240k	/mnt/expressions/Aurore/sediment_pipeline_test/modified_hg19/probes_1240k_third_allele/bwa-0.4.9	/mnt/expressions/Aurore/sediment_pipeline_test/1240k/probes_1240k.CONTROL.txt.gz.bam_sorted.bed	
