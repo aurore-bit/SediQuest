@@ -48,7 +48,7 @@ def get_bed(wildcards):
 
 mapped_bams = expand('{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam',
                      indexlibid=INDEXLIBID,	
-		     probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
+		             probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
                      project=project)
   
 rule map_all:
@@ -56,10 +56,9 @@ rule map_all:
         bam_files = mapped_bams  # Use the list of files here
     run:
         print("Hey, mapping")
-	print(f"Processing indexlibid: {wildcards.indexlibid}, probeset: {wildcards.probeset}")
         pass
 
-rule map:
+rule map:samt
     input:
         bam = get_bam,  
     output:
