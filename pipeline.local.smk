@@ -62,13 +62,15 @@ rule map:
     input:
         bam = get_bam,  
     output:
-        "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam"
+        mapped = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
+        sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
     threads: 8
     params: ref = get_ref
     shell:
         """
         echo 'Hey! Mapping BAM files...'
-        bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned {input.bam} | samtools sort -@30 -o {output}
+        bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 -p6969 --only-aligned {output.mapped} {input.bam} 
+        /home/visagie/.local/bin/samtools sort --threads {threads} -o {output.sorted} {output.mapped}
         """
 
 ##############################################
