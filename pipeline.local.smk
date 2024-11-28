@@ -69,8 +69,8 @@ rule map:
     shell:
         """
         echo 'Hey! Mapping BAM files...'
-        bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned {input.bam}  | samtools sort -@30 -o {output.mapped} 
-        /home/visagie/.local/bin/samtools sort --threads {threads} -o {output.sorted} {output.mapped}
+        bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned {input.bam}  -o {output.mapped} 
+        /home/visagie/.local/bin/samtools sort --threads {threads} @30 -o {output.sorted} {output.mapped}
         """
 
 ##############################################
