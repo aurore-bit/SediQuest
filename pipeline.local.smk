@@ -63,14 +63,15 @@ rule map:
         bam = get_bam,  
     output:
         mapped = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
-        sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
+        temp =  temp("{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam.tmp")
+       # sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
     threads: 8
     params: ref = get_ref
     shell:
         """
         echo 'Hey! Mapping BAM files...'
-        bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned {input.bam}  -o {output.mapped} 
-        /home/visagie/.local/bin/samtools sort --threads {threads} @30 -o {output.sorted} {output.mapped}
+        bam-fixpair | bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned {input.bam}  > {output.temp} 
+        /home/visagie/.local/bin/samtools sort --threads {threads} -@30 -o {output.mapped} {output.temp}
         """
 
 ##############################################
