@@ -58,7 +58,7 @@ rule map_all:
         print("Hey, mapping")
         pass
 
-rule map:samt
+rule map:
     input:
         bam = get_bam,  
     output:
