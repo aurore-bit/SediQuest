@@ -23,6 +23,9 @@ project = config["project"]
 # Define summary folder
 summary = config["summary"]
 
+#define b_score
+score = config["score"]
+
 # Read the indexlibid information
 indexlibid_df = pd.read_table(config["samples_info"], comment="#").set_index(["indexlibid"], drop=False).sort_index()
 INDEXLIBID = indexlibid_df.index.unique()
@@ -42,63 +45,36 @@ def get_ref(wildcards):
 def get_bed(wildcards):
     return probeset_df.loc[wildcards.probeset, "path_to_bed"]
 
-##############################################
-# map_all Rule
-##############################################
-
-mapped_bams = expand('{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam',
-                     indexlibid=INDEXLIBID,	
-		             probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
-                     project=project)
-  
-rule map_all:
-    input:
-        bam_files = mapped_bams  # Use the list of files here
-    run:
-        print("Hey, mapping is done")
-        pass
-
-rule map:
-    input:
-        bam = get_bam,  
-    output:
-        mapped = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
-        temp =  temp("{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam.tmp")
-       # sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
-    threads: 8
-    params: ref = get_ref
-    shell:
-        """
-        echo 'Hey! Mapping BAM files...'
-        bam-fixpair | bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned {input.bam}  > {output.temp} 
-        /home/visagie/.local/bin/samtools sort --threads {threads} -@30 -o {output.mapped} {output.temp}
-        """
 
 ##############################################
 #processing
 ##############################################
 
-rule processing:
+rule process_all:
     input: 
         expand('{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.uniq.L35MQ25.deam53x3.bam',
-               indexlibid=INDEXLIBID,
-               probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
-	       project=project)
+            indexlibid=INDEXLIBID,
+            probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
+            project=project)
     run:
         print('hey! Running target filtering, deamination, quality filtering and duplicate removal :)')
         pass
 
-
+#keeping the . for now as a 0 should we?
 rule filter_bam_by_control_sites:
     input:
         control_sites = get_bed,
         bam = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam"
     output:
         sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.bam",
+    params:
+        b_score = score,
+        temp_sites=temp("sites.tmp")
     threads: 1
     #conda: "envs/processing.yaml"
     shell: """
-        bedtools intersect -a {input.bam} -b {input.control_sites} > {output.sites_bam} 
+        awk '$7 < {params.b_score}' {input.control_sites} > {params.temp_sites}
+        bedtools intersect -a {input.bam} -b {params.temp_sites} > {output.sites_bam} 
     """
 
 rule uniq_q25_l35:
