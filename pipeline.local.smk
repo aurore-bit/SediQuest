@@ -20,9 +20,6 @@ PREFIX=config["prefix"]
 # Define project folder
 project = config["project"]
 
-# Define summary folder
-summary = config["summary"]
-
 #define b_score
 score = config["score"]
 
@@ -45,6 +42,54 @@ def get_ref(wildcards):
 def get_bed(wildcards):
     return probeset_df.loc[wildcards.probeset, "path_to_bed"]
 
+def get_control(wildcards):
+    return probeset_df.loc[wildcards.probeset, "path_to_control"]
+
+
+##############################################
+# map_all Rule
+##############################################
+
+sorted_bams = expand('{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam',
+    indexlibid=INDEXLIBID,
+    probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
+    project=project)
+
+rule map_all:
+    input:
+        bam_files = sorted_bams  # Use the list of files here
+    run:
+        print("Hey, mapping is done")
+        pass
+
+rule map:
+    input:
+        bam = get_bam,
+    output:
+        mapped = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
+        temp = temp("{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam.tmp")
+        # sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
+    threads: 8
+    params: ref = get_ref
+    shell:
+        """
+        echo 'Hey! Mapping BAM files...'
+        bam-fixpair -o {output.temp} {input.bam}
+        bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned -f {output.mapped} {output.temp}
+        """
+
+rule samtools:
+    input:
+        mapped = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam"
+    output:
+        sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
+    #temp = temp("{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam.tmp")
+    # sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
+    threads: 8
+    shell:
+        """
+        /home/visagie/.local/bin/samtools sort --threads {threads} -@30 -o {output.sorted} {input.mapped}
+        """
 
 ##############################################
 #processing
@@ -52,7 +97,7 @@ def get_bed(wildcards):
 
 rule process_all:
     input: 
-        expand('{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.uniq.L35MQ25.deam53x3.bam',
+        expand('{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.bam',
             indexlibid=INDEXLIBID,
             probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
             project=project)
@@ -73,75 +118,87 @@ rule filter_bam_by_control_sites:
     threads: 1
     #conda: "envs/processing.yaml"
     shell: """
-        awk '$7 < {params.b_score}' {input.control_sites} > {params.temp_sites}
+        awk '$7 > {params.b_score}' {input.control_sites} > {params.temp_sites}
         bedtools intersect -a {input.bam} -b {params.temp_sites} > {output.sites_bam} 
     """
 
 rule uniq_q25_l35:
     input:
-        bam = "{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.bam",
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.bam"
     output:
-        bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
-    shell:
-            """
-            bam-rmdup -o {output.bam} -q 25 -l 35 {input.bam}
-            """
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam",
+        exhaust = "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam.exhaustion"
+    params:
+        unique_bam = "{indexlibid}.uniq.L35MQ25.bam",
+        unique_bai= "{indexlibid}.uniq.L35MQ25.bam.bai",
+        new_bam="{indexlibid}.bam",
+        unique_sum="summary_stats_L35MQ25.txt"
+    shell: """
+    /home/mmeyer/perlscripts/solexa/analysis/analyzeBAM.pl -nof -minlength 35 -qual 25 {input.bam} > {output.exhaust}
+    mv {params.unique_bam} {params.new_bam}
+    mv {params.new_bam}  $(dirname {output.bam})
+    mv {params.unique_bai}  $(dirname {output.bam})
+    mv {params.unique_sum}  $(dirname {output.bam})
+           """
+ # bam-rmdup -o {output.bam} -q 25 -l 35 {input.bam}
 
 rule deam_filter:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam"
-    output: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.uniq.L35MQ25.deam53x3.bam",
-        stats="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.uniq.L35MQ25.deam53x3.stats"
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam"
+    output:
+            bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.bam",
+            stats="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.uniq.L35MQ25.deam53x3.stats"
     #conda: "envs/processing.yaml"
+    params:
+        unique_bam="{indexlibid}.deam53x3.bam",
+        new_bam="{indexlibid}.bam"
     shell: """
-    /home/mmeyer/perlscripts/solexa/analysis/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} &> {output.stats}
+    /home/mmeyer/perlscripts/solexa/analysis/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} 
+    mv {params.unique_bam}  {params.new_bam}
+    mv {params.new_bam} $(dirname {output.bam})
     """
+
 
 
 ##############################################
 #kraken
 ##############################################
-def get_bam_files():
-    bam_files = []
-    for indexlibid in INDEXLIBID:
-        for probeset in indexlibid_df.loc[indexlibid, "probeset"]:
-            paths = [
-                f"{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/*.bam",
-                f"{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/*.bam",
-                f"{project}/mappedbams/{indexlibid}/{probeset}/target/*.bam",
-                f"{project}/mappedbams/{indexlibid}/{probeset}/*.bam"
-            ]
-            for path in paths:
-                bam_files.extend(glob.glob(path))
-    return bam_files
-
-bam_files_list = get_bam_files()
-
-base_names = [os.path.basename(bam).replace('.bam', '') for bam in bam_files_list]
 
 rule kraken:
     input:
-        expand("{base}.kraken_spc", base=base_names)
+        expand(["{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.kraken_spc",
+            "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.byread",
+            "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.kraken_spc",
+            "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.byread",
+            "{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.kraken_spc",
+            "{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.byread",
+            "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.kraken_spc",
+            "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.byread"],
+            indexlibid=INDEXLIBID,
+            probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
+            project=project)
     run:
         print('hey! Running Kraken')
         pass
 
+
+
 rule bam_to_fasta:
     input:
-        split=get_bam,
-        bam="{base}/{base_name}.bam"
+       # split=get_bam,
+        bam="{indexlibid}.bam"
     output:
-        bam="{base}/{base_name}.bam.fa.gz",
-        split="{base}/kraken_split/{base_name}.bam.fa.gz"
+        fa="{indexlibid}.fa.gz"
+       # split="kraken_split/{indexlibid}.bam.fa.gz"
     threads: 1
    # conda: "envs/kraken.yaml"
     shell: """
-     bam2fastx -a -A -Q {input.bam} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.bam},
-     bam2fastx -a -A -Q {input.split} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.split}
+     bam2fastx -a -A -Q {input.bam} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.fa}
     """
+#bam2fastx -a -A -Q {input.split} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.split}
 
 rule generic_kraken:
-    input: fa="{base}.fa.gz"
-    output: kraken="{base}.kraken",
+    input: fa="{indexlibid}.fa.gz"
+    output: kraken="{indexlibid}.kraken",
     threads: 1
    # conda: "envs/kraken.yaml"
     shell: """
@@ -163,8 +220,8 @@ rule generic_kraken:
     """
 
 rule generic_kraken_summary:
-    input: kraken="{base}.kraken"
-    output: phylo="{base}.kraken_phylo"
+    input: kraken="{indexlibid}.kraken"
+    output: phylo="{indexlibid}.kraken_phylo"
     threads: 1
    # conda: "envs/kraken.yaml"
     shell: """
@@ -181,44 +238,10 @@ rule generic_kraken_summary:
     python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/kraken_report.py --db /mnt/ramdisk/refseqReleaseKraken {input.kraken} > {output.phylo}
     """
 
-#rule generic_kraken_translate:
- #   input: kraken="{base}.kraken"
-  #  output: translate="{base}.translate"
-   # threads: 1
-   # conda: "envs/kraken.yaml"
-   # shell: """
-
-    #if [ $(hostname) != "bionc13" ] ; then 
-     #    echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
-      #   sleep 30
-       #  stop
-   # fi
-
-    #echo 'making report..'
-    ## translate file has info on each read (but not in an easy-to-digest way)
-    ## phylo file has a summary for each level in the taxonomy
-   # python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/kraken_report.py --db /mnt/ramdisk/refseqReleaseKraken {input.kraken} --translate {output.translate} > /dev/null
-
-    #"""
-
-#rule generic_kraken_byread:
- #   input: translate="{base}.translate"
-  #  output: byread="{base}.byread"
-   # threads: 1
-   # conda: "envs/kraken.yaml"
-    #shell: """
-
-     #echo 'parsing translate file..'
-    # python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/parse_kraken_translate_file.py --translate-file {input.translate} > {output.byread}
-
-   # """
-
-### summarize the major species groups in the kraken phylogeny file
-
 rule generic_kraken_spc_summary:
-    input: spc_krak="{base}.kraken_phylo",
+    input: spc_krak="{indexlibid}.kraken_phylo",
         spc_groups="/mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/data/major_species_groups.txt"
-    output: spc_summary="{base}.kraken_spc"
+    output: spc_summary="{indexlibid}.kraken_spc"
   #  conda: "envs/kraken.yaml"
     shell: """
 
@@ -250,44 +273,82 @@ rule generic_kraken_spc_summary:
 
 """
 
+rule generic_kraken_translate:
+    input: kraken="{indexlibid}.kraken"
+    output: translate="{indexlibid}.translate"
+    threads: 1
+    shell: """
+
+    if [ $(hostname) != "bionc13" ] ; then 
+         echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
+         sleep 30
+         stop
+    fi
+
+    echo 'making report..'
+    ## translate file has info on each read (but not in an easy-to-digest way)
+    ## phylo file has a summary for each level in the taxonomy
+    python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/kraken_report.py --db /mnt/ramdisk/refseqReleaseKraken {input.kraken} --translate {output.translate} > /dev/null
+
+    """
+
+rule generic_kraken_byread:
+    input: translate="{indexlibid}.translate"
+    output: byread="{indexlibid}.byread"
+    threads: 1
+    shell: """
+
+     echo 'parsing translate file..'
+     python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/parse_kraken_translate_file.py --translate-file {input.translate} > {output.byread}
+
+    """
 
 ##############################################
 #summary
 ##############################################
 rule summaries:
     input:
-        expand("{summary}/{indexlibid}/{indexlibid}.kraken_mapped.pdf",
-    summary=summary,
-    indexlibid=INDEXLIBID),
-        "{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/split_exact/map_{ref}/target/rmdupL35MQ25/{indexlibid}.pipeline_summary.txt",
-        "{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/split_exact/map_{ref}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.anno_damage.txt",
+        expand(["{project}_summary/{indexlibid}/{probeset}/coverage_plot.png",
+        "{project}_summary/{indexlibid}/{probeset}/{indexlibid}.pipeline_summary.txt",
+        "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.anno_damage.txt",
+        "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.read_summary.txt.gz"],
+        indexlibid=INDEXLIBID,
+        probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
+        project=project)
     run:
         print('hey! Creating summaries')
         pass
 
-
+rule cov_bed_files:
+    input: "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam"
+    output: bed="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bed",
+            cov="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.cov"
+    shell:"""
+            bedtools bamtobed -i {input} > {output.bed}
+            samtools mpileup -B {input} > {output.cov}
+            """
 
 rule plot:
-    input: "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.uniq.L35MQ25.deam53x3.bam"
-    output: plot="{summary}/{wildcards.indexlibid}/{wildcards.probeset}/{wildcards.seqrun}/coverage_plot.png"
+    input: "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bed",
+    output:
+            plot="{project}_summary/{indexlibid}/{probeset}/coverage_plot.png",
     run:
         shell(f"""
-			cd {summary_dir}
-			mkdir -p {wildcards.indexlibid}
-			samtools mpileup -B {project}/mappedbams/{wildcards.indexlibid}/{wildcards.probeset}/{wildcards.seqrun}/target/rmdupL35MQ25/{wildcards.indexlibid}.uniq.L35MQ25.bam > {project}/mappedbams/{wildcards.indexlibid}/{wildcards.probeset}/{wildcards.seqrun}/target/rmdupL35MQ25/{wildcards.indexlibid}.uniq.L35MQ25.bam.cov
-			Rscript scripts/%primates_coverage_kraken_SNPs_burden_plot.R
+			Rscript scripts/primates_coverage_kraken_SNPs_burden_plot.R
 		""")
 
 rule pipeline_summary:
-    input: map_bam="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/{indexlibid}.bam",
-        target_bam="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/{indexlibid}.bam",
-        rmdup_bam="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
-        rmdup_stats="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/rmdupL35MQ25/{indexlibid}.summary_stats_L35MQ25.txt"
-    output: summary_annotated="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/rmdupL35MQ25/{indexlibid}.pipeline_summary.txt"
+    input:
+        map_bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
+        target_bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.bam",
+        rmdup_bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam",
+        rmdup_stats="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/summary_stats_L35MQ25.txt"
+    output:
+        summary_annotated="{project}_summary/{indexlibid}/{probeset}/{indexlibid}.pipeline_summary.txt"
     shell:
         """
-
-        splitbam="{wildcards.project}/splitbams/{wildcards.seqrun}/{wildcards.indexlibid}.bam"
+        splitbam=get_bam
+        #ls $splitbam
 
         if [ -e $splitbam ] ; then
           sc=$(samtools view -c $splitbam)
@@ -295,37 +356,53 @@ rule pipeline_summary:
           sc="NA"
         fi
 
+        #tmp=$(mktemp)
         tmp={output.summary_annotated}
 
-        echo IndexLibID probeset ref {params.tags} split mapped \
+        echo IndexLibID probeset ref split mapped \
         $(head -n1 {input.rmdup_stats} | cut -f2- | sed 's/&//g' | sed 's/%/pct_/g' | sed 's/raw/target/g') \
         primate | tr ' ' '\t' > $tmp
 
-        echo {wildcards.indexlibid} {wildcards.probeset} {wildcards.ref} {params.tag_vals} $sc \
+        echo {wildcards.indexlibid} {wildcards.probeset} \
         $(samtools view -c {input.map_bam}) \
         $(tail -n1 {input.rmdup_stats} | cut -f2-) \
-        $(samtools view -c {input.primate_bam}) \
         | tr ' ' '\t' >> $tmp
-
         """
+
+rule bam_read_summary:
+     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam",
+     	    control=get_control
+     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.read_summary.txt.gz"
+     shell: """
+            ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
+     	    time /home/benjamin_vernot/miniconda3/bin/python /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/bam_basic_stats_pysam2.py \
+	    	 --control {input.control} \
+		    --bam {input.bam} \
+		    --tags lib --tags-fill {wildcards.indexlibid} \
+		    --control-header /mnt/expressions/benjamin_vernot/soil_capture_2017/site_categories_for_capture/soil_probe_designs/probes_CONTROL_HEADER.txt \
+		    | gzip -c > {output.summary}
+            """
+
 
 
 #deam summaries files
 rule deam_summaries:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/rmdupL35MQ25/deam/{indexlibid}.uniq.L35MQ25.deam53x3.bam"
-    output: plots="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.L30-1000_MQ0.plots.pdf",
-        summary="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.summary_damage.txt"
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.bam"
+    output: plots="{project}/mappedbams/{indexlibid}/{probeset}target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.L30-1000_MQ0.plots.pdf",
+        summary="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.summary_damage.txt"
     shell: """
-           /home/mmeyer/perlscripts/solexa/analysis/substitution_patterns.pl {input.bam} > {output.plots}
-	   /home/mmeyer/perlscripts/solexa/analysis/summarize_CT_frequencies.pl -screen > {output.summary]
+            /home/mmeyer/perlscripts/solexa/analysis/substitution_patterns.pl {input.bam} > {output.plots}
+            /home/mmeyer/perlscripts/solexa/analysis/summarize_CT_frequencies.pl -screen > {output.summary}
+            rm {indexlibid}*
            """
 
 rule annotate_deam_summary:
-    input: damage="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.summary_damage.txt"
-    output: damage_annotated="{project}/mappedbams/{indexlibid}/{probeset}/{seqrun}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.anno_damage.txt",
+    input: damage="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.summary_damage.txt"
+    output: damage_annotated="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.anno_damage.txt",
     shell:
         """
-        sed 1d {input.damage} | tr '-' '\t' | cut -f 3- | awk  'BEGIN {{OFS="\t"}} {{print "{wildcards.indexlibid}", "{wildcards.probeset}", "{wildcards.seqrun}", "{wildcards.ref}", $0}}' > {output.damage_annotated}
+        sed 1d {input.damage} | tr '-' '\t' | cut -f 3- | awk  'BEGIN {{OFS="\t"}} {{print "{wildcards.indexlibid}", "{wildcards.probeset}", $0}}' > {output.damage_annotated}
         """
+
 
 
