@@ -1,15 +1,21 @@
 #script to create all summary plots
-library(knitr)
+
 library(data.table)
 library(tidyverse)
 library(ggplot2)
 
-knitr::opts_knit$set(root.dir = normalizePath(".."))
+#knitr:opts_knit$set(root.dir = normalizePath(".."))
 
-data <- fread("../config/sample.csv")
+data <- fread("/mnt/expressions/Aurore/sediment_pipeline_v0/config/samples.csv")
 
-burden_path <- paste0("../probeset/", data$probeset, "/", data$probeset, ".burden.txt")
-coverage_path <- paste0("../output_v0/mappedbams/", data$indexlibid, "/", data$probeset, "/", data$seqrun, "/target/rmdupL35MQ25/", data$indexlibid,".uniq.L35MQ25.bam.cov")
+burden_path <- paste0("/mnt/expressions/Aurore/sediment_pipeline_test/",
+                      data$probeset, "/",
+                      data$probeset, ".burden.txt")
+
+coverage_path <- paste0("/mnt/expressions/Aurore/sediment_pipeline_v0/output_v0/mappedbams/",
+                        data$indexlibid, "/",
+                        data$probeset, "/target/rmdupL35MQ25/",
+                        data$indexlibid, ".cov")
 
 # Read the burden data using the dynamically created file path
 burden <- fread(burden_path) %>%
@@ -19,7 +25,7 @@ burden <- fread(burden_path) %>%
 #Kraken plot
 ##############
 #for bam
-mapped_bam_path <- "../output_v0/"
+mapped_bam_path <- "/mnt/expressions/Aurore/sediment_pipeline_v0/output_v0/"
 
 # List all .kraken_phylo files in the directory and subdirectories
 file_list_mapped_bam <- list.files(mapped_bam_path, pattern = "\\.kraken_spc$", full.names = TRUE, recursive = TRUE)
@@ -63,8 +69,8 @@ plot_kraken_mapped_bam <- ggplot(kraken_mapped_bam, aes(x = step, y = Percentage
   ) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-
-ggsave("../output_v0_summary/, data$indexlibid, "/", data$indexlibid, kraken_mapped.pdf", plot = plot_kraken_mapped_bam, device = "pdf")
+path_to_save <- paste0("/mnt/expressions/Aurore/sediment_pipeline_v0/output_v0_summary/", data$indexlibid, "/", data$probeset, "/",data$indexlibid, "_kraken_mapped.pdf")
+ggsave(path_to_save, plot = plot_kraken_mapped_bam, device = "pdf")
 
 
 ##############
@@ -72,7 +78,6 @@ ggsave("../output_v0_summary/, data$indexlibid, "/", data$indexlibid, kraken_map
 ##############
 burden_number <- burden %>%
   select(pos, n_3, b_3) %>%
-  mutate(b_3 = ifelse(b_3 == ".", 0, b_3)) %>%
   filter(b_3 != ".") %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   filter(b_3 < 30) %>%
@@ -89,7 +94,6 @@ coverage <-  fread(coverage_path, header = FALSE) %>%
   filter(b_3!=".") %>%
   filter(!is.na(b_3)) %>%
   filter(!is.na(coverage)) %>%
-  mutate(b_3 = ifelse(b_3 == ".", 0, b_3)) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(coverage, n_3,b_3) %>%
   group_by(b_3, n_3) %>%
@@ -107,10 +111,11 @@ cov_plot <- ggplot(coverage, aes(x = b_3, y = total_coverage, color = as.factor(
   labs(x = "B Score (b_3)", 
        y = "Coverage", 
        color = "N Score") + 
-  ylim(0,)+
+  ylim(0,1)+
   theme_minimal()
 
-ggsave("../output_v0_summary/, data$indexlibid, "/",data$indexlibid, burden_primates_plot.pdf", plot = coverage, device = "pdf")
+path_to_save <- paste0("/mnt/expressions/Aurore/sediment_pipeline_v0/output_v0_summary/", data$indexlibid, "/", data$probeset, "/",data$indexlibid, "_burden_primates_plot.pdf")
+ggsave(path_to_save, plot = coverage, device = "pdf")
 
 
 ##############
@@ -118,20 +123,22 @@ ggsave("../output_v0_summary/, data$indexlibid, "/",data$indexlibid, burden_prim
 ##############
 
 #kraken info
-kraken <-  fread("/mnt/expressions/Aurore/sediment_pipeline_test/test_arev_bone/mappedbams/A48095/1240k/210816_NS500559_0091_AH3YY3AFX3_N12128/proc1/s_1/split_exact/map_1240k_capture/target/rmdupL35MQ25/kraken/.uniq.L35MQ25.bam.byread", header=F) %>%
+path_to_kraken <- paste0("/mnt/expressions/Aurore/sediment_pipeline_v0/output_v0/mappedbams/", data$indexlibid, "/", data$probeset, "/target/rmdupL35MQ25/", data$indexlibid, ".byread")
+kraken <-  fread(path_to_kraken, header=F) %>%
   select(V1,V2) %>%
   rename(read=V1)
 
 #take positions and reads names assuming . value are 0 for b score
 #to get the number of read for each burden scores
-primates <- fread("/mnt/expressions/Aurore/sediment_pipeline_test/test_arev_bone/mappedbams/A48095/1240k/210816_NS500559_0091_AH3YY3AFX3_N12128/proc1/s_1/split_exact/map_1240k_capture/target/rmdupL35MQ25/A48095.uniq.L35MQ25.bed") %>%
+path_to_primate <- paste0("/mnt/expressions/Aurore/sediment_pipeline_v0/output_v0/mappedbams/", data$indexlibid, "/", data$probeset, "/target/rmdupL35MQ25/",data$indexlibid, ".bed")
+primates <- fread(path_to_primate) %>%
   select(V1, V2, V3, V4) %>%
   rename(chrom = V1,
          pos0 = V2,
          pos = V3,
          read = V4) %>%
   full_join(burden, by = c("chrom", "pos0", "pos")) %>%
-  mutate(b_3 = ifelse(b_3 == ".", 0, b_3)) %>%
+  filter(b_3 != ".") %>%
   full_join(kraken, by = "read") %>%
   filter(!is.na(read)) %>%
   group_by (b_3, n_3) %>%
@@ -153,7 +160,8 @@ burden_primates_plot <- ggplot(primates, aes(x = b_3, y = percentage_primate, co
   theme_minimal()
 
 #save plot
-ggsave("../output_v0_summary/, data$indexlibid, "/", data$indexlibid, burden_primates_plot.pdf", plot = plot, device = "pdf")
+path_to_save <- paste0("/mnt/expressions/Aurore/sediment_pipeline_v0/output_v0_summary/", data$indexlibid, "/", data$probeset, "/", data$indexlibid, "_burden_primates_plot.pdf")
+ggsave(path_to_save, plot = burden_primates_plot, device = "pdf")
 
 
 ##############
@@ -163,7 +171,7 @@ ggsave("../output_v0_summary/, data$indexlibid, "/", data$indexlibid, burden_pri
 #number of SNPs for each b and n score
 burden_SNPs <- burden %>%
   select(pos, n_3, b_3) %>%
-  mutate(b_3 = ifelse(b_3 == ".", 0, b_3)) %>%
+  filter(b_3 != ".") %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   filter(b_3 < 30) %>%
   group_by(n_3, b_3) %>%
@@ -179,4 +187,5 @@ burden_SNPs_plot <- ggplot(burden_number, aes(x = b_3, y = count, fill = as.fact
   theme_minimal()
 
 #save plot
-ggsave("../output_v0_summary/ , data$indexlibid, "/", data$indexlibid, burden_SNPs_plot.pdf", plot = plot, device = "pdf")
+path_to_save <- paste0("/mnt/expressions/Aurore/sediment_pipeline_v0/output_v0_summary/" , data$indexlibid, "/",data$probeset, "/", data$indexlibid, "_burden_SNPs_plot.pdf")
+ggsave(path_to_save, plot = plot, device = "pdf")
