@@ -2,6 +2,11 @@
 # Draft nuclear sediment pipeline
 #
 # Aurore GALTIER, 25/11/2024
+
+#FOR NOW YOU NEED TO:
+#-have a config folder with config, probeset and sample files
+#-copy split bam (raw file) in /output_v0/split/{indexlibid}/{probeset}/
+#-copy mapped bam in /output_v0/mappedbams/{indexlibid}/{probeset}/
 ################################################################################
 
 from snakemake.utils import R
@@ -21,7 +26,7 @@ PREFIX=config["prefix"]
 project = config["project"]
 
 #define b_score
-score = config["score"]
+score_b = config["score_b"]
 
 # Read the indexlibid information
 indexlibid_df = pd.read_table(config["samples_info"], comment="#").set_index(["indexlibid"], drop=False).sort_index()
@@ -45,11 +50,13 @@ def get_bed(wildcards):
 def get_control(wildcards):
     return probeset_df.loc[wildcards.probeset, "path_to_control"]
 
+def get_control_info(wildcards):
+    return probeset_df.loc[wildcards.probeset, "path_to_control_info"]
+
 
 ##############################################
 # map_all Rule
 ##############################################
-
 sorted_bams = expand('{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam',
     indexlibid=INDEXLIBID,
     probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
@@ -57,26 +64,26 @@ sorted_bams = expand('{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.
 
 rule map_all:
     input:
-        bam_files = sorted_bams  # Use the list of files here
+        bam_files = sorted_bams,
+    # Use the list of files here
     run:
         print("Hey, mapping is done")
         pass
 
-rule map:
-    input:
-        bam = get_bam,
-    output:
-        mapped = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
-        temp = temp("{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam.tmp")
-        # sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
-    threads: 8
-    params: ref = get_ref
-    shell:
-        """
-        echo 'Hey! Mapping BAM files...'
-        bam-fixpair -o {output.temp} {input.bam}
-        bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned -f {output.mapped} {output.temp}
-        """
+#rule map:
+ #   input:
+  #      bam = get_bam,
+   # output:
+    #    mapped = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
+     #   temp = temp("{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam.tmp")
+   # threads: 8
+   # params: ref = get_ref
+    #shell:
+     #   """
+      #  echo 'Hey! Mapping BAM files...'
+       # bam-fixpair -o {output.temp} {input.bam}
+        #bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned -f {output.mapped} {output.temp}
+       # """
 
 rule samtools:
     input:
@@ -91,68 +98,84 @@ rule samtools:
         /home/visagie/.local/bin/samtools sort --threads {threads} -@30 -o {output.sorted} {input.mapped}
         """
 
+
+
 ##############################################
 #processing
 ##############################################
 
 rule process_all:
     input: 
-        expand('{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.bam',
+        expand("{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/rmdupL35MQ25/deam/{indexlibid}.bam",
             indexlibid=INDEXLIBID,
             probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
-            project=project)
+            project=project,
+            score_b=score_b)
     run:
         print('hey! Running target filtering, deamination, quality filtering and duplicate removal :)')
         pass
 
 #keeping the . for now as a 0 should we?
-rule filter_bam_by_control_sites:
+rule filter_control_sites:
     input:
         control_sites = get_bed,
-        bam = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam"
+        control= get_control,
     output:
-        sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.bam",
+        sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/sites_{b_score}.filtered.txt",
     params:
-        b_score = score,
-        temp_sites=temp("sites.tmp")
+        b_score=score_b,
     threads: 1
     #conda: "envs/processing.yaml"
     shell: """
-        awk '$7 > {params.b_score}' {input.control_sites} > {params.temp_sites}
-        bedtools intersect -a {input.bam} -b {params.temp_sites} > {output.sites_bam} 
+        Rscript scripts/filter_SNPs.R {score_b} {input.control_sites} {input.control} {output.sites_filtered}
+    """
+
+rule filter_bam_by_control_sites:
+    input:
+        sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/sites_{score_b}.filtered.txt",
+        bam = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
+    output:
+        sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/{indexlibid}.bam",
+    threads: 1
+    #conda: "envs/processing.yaml"
+    shell: """
+        bedtools intersect -a {input.bam} -b {input.sites_filtered} > {output.sites_bam} 
     """
 
 rule uniq_q25_l35:
     input:
-        bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.bam"
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/{indexlibid}.bam"
     output:
-        bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam",
-        exhaust = "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam.exhaustion"
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/rmdupL35MQ25/{indexlibid}.bam",
+        bai="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/rmdupL35MQ25/{indexlibid}.bai",
+        exhaust = "{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/rmdupL35MQ25/{indexlibid}.bam.exhaustion"
     params:
         unique_bam = "{indexlibid}.uniq.L35MQ25.bam",
         unique_bai= "{indexlibid}.uniq.L35MQ25.bam.bai",
         new_bam="{indexlibid}.bam",
+        new_bai="{indexlibid}.bai",
         unique_sum="summary_stats_L35MQ25.txt"
     shell: """
     /home/mmeyer/perlscripts/solexa/analysis/analyzeBAM.pl -nof -minlength 35 -qual 25 {input.bam} > {output.exhaust}
     mv {params.unique_bam} {params.new_bam}
+    mv {params.unique_bai} {params.new_bai}
     mv {params.new_bam}  $(dirname {output.bam})
-    mv {params.unique_bai}  $(dirname {output.bam})
+    mv {params.new_bai}  $(dirname {output.bam})
     mv {params.unique_sum}  $(dirname {output.bam})
            """
  # bam-rmdup -o {output.bam} -q 25 -l 35 {input.bam}
 
 rule deam_filter:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam"
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/rmdupL35MQ25/{indexlibid}.bam"
     output:
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.bam",
-            stats="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.uniq.L35MQ25.deam53x3.stats"
+            bam="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/rmdupL35MQ25/deam/{indexlibid}.bam",
+            stats="{project}/mappedbams/{indexlibid}/{probeset}/target/{score_b}_filter/rmdupL35MQ25/deam/{indexlibid}.deam53x3.stats"
     #conda: "envs/processing.yaml"
     params:
         unique_bam="{indexlibid}.deam53x3.bam",
         new_bam="{indexlibid}.bam"
     shell: """
-    /home/mmeyer/perlscripts/solexa/analysis/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} 
+    /home/mmeyer/perlscripts/solexa/analysis/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} &> {output.stats}
     mv {params.unique_bam}  {params.new_bam}
     mv {params.new_bam} $(dirname {output.bam})
     """
@@ -172,7 +195,9 @@ rule kraken:
             "{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.kraken_spc",
             "{project}/mappedbams/{indexlibid}/{probeset}/target/{indexlibid}.byread",
             "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.kraken_spc",
-            "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.byread"],
+            "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.byread",
+            "{project}/split/{indexlibid}/{probeset}/{indexlibid}.kraken_spc",
+            "{project}/split/{indexlibid}/{probeset}/{indexlibid}.byread"],
             indexlibid=INDEXLIBID,
             probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
             project=project)
@@ -181,24 +206,20 @@ rule kraken:
         pass
 
 
-
 rule bam_to_fasta:
     input:
-       # split=get_bam,
         bam="{indexlibid}.bam"
     output:
         fa="{indexlibid}.fa.gz"
-       # split="kraken_split/{indexlibid}.bam.fa.gz"
     threads: 1
    # conda: "envs/kraken.yaml"
     shell: """
      bam2fastx -a -A -Q {input.bam} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.fa}
-    """
-#bam2fastx -a -A -Q {input.split} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.split}
+     """
 
 rule generic_kraken:
     input: fa="{indexlibid}.fa.gz"
-    output: kraken="{indexlibid}.kraken",
+    output: kraken="{indexlibid}.kraken"
     threads: 1
    # conda: "envs/kraken.yaml"
     shell: """
@@ -308,9 +329,10 @@ rule generic_kraken_byread:
 ##############################################
 rule summaries:
     input:
-        expand(["{project}_summary/{indexlibid}/{probeset}/coverage_plot.png",
+        expand(["{project}_summary/{indexlibid}/{probeset}/_burden_primates_plot.pdf",
+        "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.L30-1000_MQ0.plots.pdf",
         "{project}_summary/{indexlibid}/{probeset}/{indexlibid}.pipeline_summary.txt",
-        "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.anno_damage.txt",
+        "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.anno_damage.txt",
         "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.read_summary.txt.gz"],
         indexlibid=INDEXLIBID,
         probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
@@ -319,24 +341,16 @@ rule summaries:
         print('hey! Creating summaries')
         pass
 
+#create coverage file
 rule cov_bed_files:
     input: "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam"
-    output: bed="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bed",
+    output:
             cov="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.cov"
     shell:"""
-            bedtools bamtobed -i {input} > {output.bed}
             samtools mpileup -B {input} > {output.cov}
             """
 
-rule plot:
-    input: "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bed",
-    output:
-            plot="{project}_summary/{indexlibid}/{probeset}/coverage_plot.png",
-    run:
-        shell(f"""
-			Rscript scripts/primates_coverage_kraken_SNPs_burden_plot.R
-		""")
-
+#just count number of reads
 rule pipeline_summary:
     input:
         map_bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
@@ -347,7 +361,7 @@ rule pipeline_summary:
         summary_annotated="{project}_summary/{indexlibid}/{probeset}/{indexlibid}.pipeline_summary.txt"
     shell:
         """
-        splitbam=get_bam
+        splitbam="{wildcards.project}/split/{wildcards.probeset}/{wildcards.indexlibid}.bam"
         #ls $splitbam
 
         if [ -e $splitbam ] ; then
@@ -369,9 +383,10 @@ rule pipeline_summary:
         | tr ' ' '\t' >> $tmp
         """
 
+#create a file indicating every info for each read
 rule bam_read_summary:
      input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.bam",
-     	    control=get_control
+     	    control=get_control_info
      output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.read_summary.txt.gz"
      shell: """
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
@@ -386,23 +401,36 @@ rule bam_read_summary:
 
 
 #deam summaries files
-rule deam_summaries:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.bam"
-    output: plots="{project}/mappedbams/{indexlibid}/{probeset}target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.L30-1000_MQ0.plots.pdf",
-        summary="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.summary_damage.txt"
+rule deam_plot:
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.bam",
+    output: plots="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.L30-1000_MQ0.plots.pdf",
+    params: bam="../{indexlibid}.bam",
     shell: """
-            /home/mmeyer/perlscripts/solexa/analysis/substitution_patterns.pl {input.bam} > {output.plots}
+            cd $(dirname {output.plots})
+            /home/mmeyer/perlscripts/solexa/analysis/substitution_patterns.pl {params.bam} 
+            """
+
+rule deam_summaries:
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/{indexlibid}.bam",
+    output: summary="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.summary_damage.txt"
+    shell: """    
             /home/mmeyer/perlscripts/solexa/analysis/summarize_CT_frequencies.pl -screen > {output.summary}
-            rm {indexlibid}*
            """
 
 rule annotate_deam_summary:
-    input: damage="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.summary_damage.txt"
-    output: damage_annotated="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.uniq.L35MQ25.deam53x3.anno_damage.txt",
+    input: damage="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.summary_damage.txt"
+    output: damage_annotated="{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/deam/deam_stats/{indexlibid}.anno_damage.txt",
     shell:
         """
         sed 1d {input.damage} | tr '-' '\t' | cut -f 3- | awk  'BEGIN {{OFS="\t"}} {{print "{wildcards.indexlibid}", "{wildcards.probeset}", $0}}' > {output.damage_annotated}
         """
 
-
-
+#create necessary plots
+rule plot:
+    input: "{project}/mappedbams/{indexlibid}/{probeset}/target/rmdupL35MQ25/{indexlibid}.cov",
+    output:
+            plot="{project}_summary/{indexlibid}/{probeset}/coverage_plot.png",
+    run:
+        shell(f"""
+			Rscript scripts/primates_coverage_kraken_SNPs_burden_plot.R
+		""")
