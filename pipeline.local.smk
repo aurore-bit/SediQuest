@@ -7,6 +7,14 @@
 #-have a config folder with config, probeset and sample files
 #-copy split bam (raw file) in /output_v0/split/{indexlibid}/{probeset}/
 #-copy mapped bam in /output_v0/mappedbams/{indexlibid}/{probeset}/
+
+#WHAT IT DOES
+#-check_ref_mapped_bam rule to check if the reference genome was indeed mapped to the good reference (third allele reference genome)
+#-map_all rule to map to the good reference (third allele reference genome)
+#-process_all rule to run unique_qual_length target and deam filtering (in this order)
+#-kraken rule to run all the kraken steps
+#-summaries to create summaries plot and table
+
 ################################################################################
 
 from snakemake.utils import R
@@ -98,7 +106,18 @@ rule samtools:
         /home/visagie/.local/bin/samtools sort --threads {threads} -@30 -o {output.sorted} {input.mapped}
         """
 
+##############################################
+#check reference genome in bam file
+##############################################
 
+rule check_ref_mapped_bam:
+    input:
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam"
+    params:
+        ref=get_ref
+    shell: """ 
+    python check_mapped_ref.py {input.bam} {params.ref}
+           """
 
 ##############################################
 #processing
@@ -106,7 +125,8 @@ rule samtools:
 
 rule process_all:
     input: 
-        expand("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
+        expand(["{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
+                "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bai"],
             indexlibid=INDEXLIBID,
             probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
             project=project,
@@ -160,10 +180,12 @@ rule filter_bam_by_control_sites:
         bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.bam",
     output:
         sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam",
+        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bai",
     threads: 1
     #conda: "envs/processing.yaml"
     shell: """
         bedtools intersect -a {input.bam} -b {input.sites_filtered} > {output.sites_bam} 
+        samtools index {output.sites_bam} {output.bai}
     """
 
 
@@ -171,6 +193,7 @@ rule deam_filter:
     input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam"
     output:
             bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
+            bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bai",
             stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.deam53x3.stats"
     #conda: "envs/processing.yaml"
     params:
@@ -180,6 +203,7 @@ rule deam_filter:
     /home/mmeyer/perlscripts/solexa/analysis/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} &> {output.stats}
     mv {params.unique_bam}  {params.new_bam}
     mv {params.new_bam} $(dirname {output.bam})
+    samtools index {output.bam} {output.bai}
     """
 
 
@@ -264,38 +288,50 @@ rule generic_kraken_summary:
 
 rule generic_kraken_spc_summary:
     input: spc_krak="{indexlibid}.kraken_phylo",
-        spc_groups="/mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/data/major_species_groups.txt"
+        #spc_groups="/mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/data/major_species_groups.txt"
     output: spc_summary="{indexlibid}.kraken_spc"
   #  conda: "envs/kraken.yaml"
     shell: """
+    
+    v=$((grep '  Afrotheria$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
+    echo "$v" {input.spc_krak}
+    
+    w=$((grep '  Primates$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
+    echo "$v: $w" {input.spc_krak}
+    
+    x=$((grep '  Laurasiatheria$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
+    echo "$v: $w: $x" {input.spc_krak}
+    
+    y=$((grep '  Glires$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
+    echo "$v: $w: $x: $y" {input.spc_krak}
 
-    grep -f {input.spc_groups} {input.spc_krak} | awk '{{print $6,$2}}' > {output.spc_summary}
-
-    n=$(awk '{{s += $2}} END {{print s}}' {output.spc_summary})
-    echo "$n : " {input.spc_krak}
-
-    m=$(grep '  Mammalia$' {input.spc_krak} | awk '{{print $2-'$n'}}')
-    echo "$n : $m : " {input.spc_krak}
+    m=$((grep '  Mammalia$' {input.spc_krak} ||echo 0 0) | awk '{{print $2-'$v'-'$w'-'$x'-'$y'}}')
+    echo " $v: $w: $x: $y: $m : " {input.spc_krak}
 
     b=$((grep '  Bacteria$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
-    echo "$n : $m : $b" {input.spc_krak}
+    echo "$v: $w: $x: $y : $m : $b" {input.spc_krak}
 
     s=$((grep '  Sauropsida$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
-    echo "$n : $m : $b : $s :" {input.spc_krak}
+    echo "$v: $w: $x: $y : $m : $b : $s :" {input.spc_krak}
 
-    r=$(grep '	root$' {input.spc_krak} | awk '{{print $2-'$n'-'$m'-'$b'-'$s'}}')
-    echo "$n : $m : $b : $s : $r :" {input.spc_krak}
+    r=$(grep '	root$' {input.spc_krak} | awk '{{print $2-'$m'-'$b'-'$s'-'$v'-'$w'-'$x'-'$y'}}')
+    echo "$v: $w: $x: $y : $m : $b : $s : $r :" {input.spc_krak}
 
     u=$(grep '	unclassified$' {input.spc_krak} | awk '{{print $2}}')
-    echo "$n : $m : $b : $s : $r : $u : " {input.spc_krak}
+    echo "$v: $w: $x: $y : $m : $b : $s : $r : $u : " {input.spc_krak}
 
-    echo Mammalia $m >> {output.spc_summary}
-    echo Bacteria $b >> {output.spc_summary}
-    echo Sauropsida $s >> {output.spc_summary}
-    echo root $r >> {output.spc_summary}
-    echo unclassified $u >> {output.spc_summary}
+    echo "Mammalia $m" >> {output.spc_summary}
+    echo "Bacteria $b" >> {output.spc_summary}
+    echo "Sauropsida $s" >> {output.spc_summary}
+    echo "root $r" >> {output.spc_summary}
+    echo "unclassified $u" >> {output.spc_summary}
+    echo "Afrotheria $v" >> {output.spc_summary}
+    echo "Primates $w" >> {output.spc_summary}
+    echo "Laurasiatheria $x" >> {output.spc_summary}
+    echo "Glires $y" >> {output.spc_summary}
 
 """
+
 
 rule generic_kraken_translate:
     input: kraken="{indexlibid}.kraken"
@@ -336,7 +372,8 @@ rule summaries:
         "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/{indexlibid}.L30-1000_MQ0.plots.pdf",
         "{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}.pipeline_summary.txt",
         "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/{indexlibid}.anno_damage.txt",
-        "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.read_summary.txt.gz"],
+        "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.read_summary.txt.gz",
+        "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.read_summary.txt.gz"],
         indexlibid=INDEXLIBID,
         probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
         project=project,
@@ -360,7 +397,7 @@ rule pipeline_summary:
         map_bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
         target_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam",
         rmdup_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.bam",
-        rmdup_stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/summary_stats_L35MQ25.txt"
+        rmdup_stats="summary_stats_L35MQ25.txt"
     output:
         summary_annotated="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}.pipeline_summary.txt"
     shell:
@@ -388,9 +425,9 @@ rule pipeline_summary:
         """
 
 #create a file indicating every info for each read
-rule bam_read_summary:
+rule bam_read_summary_target:
      input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam",
-     	    control=get_control_info
+            control=get_control_info
      output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.read_summary.txt.gz"
      shell: """
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
@@ -402,7 +439,19 @@ rule bam_read_summary:
 		    | gzip -c > {output.summary}
             """
 
-
+rule bam_read_summary_deam:
+     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
+            control=get_control_info
+     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.read_summary.txt.gz"
+     shell: """
+            ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
+     	    time /home/benjamin_vernot/miniconda3/bin/python /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/bam_basic_stats_pysam2.py \
+	    	 --control {input.control} \
+		    --bam {input.bam} \
+		    --tags lib --tags-fill {wildcards.indexlibid} \
+		    --control-header /mnt/expressions/benjamin_vernot/soil_capture_2017/site_categories_for_capture/soil_probe_designs/probes_CONTROL_HEADER.txt \
+		    | gzip -c > {output.summary}
+            """
 
 #deam summaries files
 rule deam_plot:
