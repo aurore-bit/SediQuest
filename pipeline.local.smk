@@ -36,6 +36,12 @@ project = config["project"]
 #define b_score
 score_b = config["score_b"]
 
+#define n_score
+score_n = config["score_n"]
+
+#define group to extract from kraken output
+kraken_group = config["kraken_group"]
+
 # Read the indexlibid information
 indexlibid_df = pd.read_table(config["samples_info"], comment="#").set_index(["indexlibid"], drop=False).sort_index()
 INDEXLIBID = indexlibid_df.index.unique()
@@ -67,7 +73,7 @@ def get_control_info(wildcards):
 ##############################################
 sorted_bams = expand('{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam',
     indexlibid=INDEXLIBID,
-    probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
+    probeset=indexlibid_df.loc[INDEXLIBID, "probeset"].unique(),
     project=project)
 
 rule map_all:
@@ -93,6 +99,7 @@ rule map_all:
         #bwa bam2bam -t {threads} -g {params.ref} -n 0.01 -o 2 -l 16500 --only-aligned -f {output.mapped} {output.temp}
        # """
 
+
 rule samtools:
     input:
         mapped = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam"
@@ -100,24 +107,15 @@ rule samtools:
         sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
     #temp = temp("{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam.tmp")
     # sorted = "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.sorted.bam"
+    params:
+        ref = get_ref
     threads: 8
     shell:
         """
+        python3.7 scripts/check_mapped_ref.py {input.mapped} {params.ref}
         /home/visagie/.local/bin/samtools sort --threads {threads} -@30 -o {output.sorted} {input.mapped}
         """
 
-##############################################
-#check reference genome in bam file
-##############################################
-
-rule check_ref_mapped_bam:
-    input:
-        bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam"
-    params:
-        ref=get_ref
-    shell: """ 
-    python check_mapped_ref.py {input.bam} {params.ref}
-           """
 
 ##############################################
 #processing
@@ -125,12 +123,14 @@ rule check_ref_mapped_bam:
 
 rule process_all:
     input: 
-        expand(["{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
-                "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bai"],
+        expand([ "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bam",
+                "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bai"
+                ],
             indexlibid=INDEXLIBID,
             probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
             project=project,
-            score_b=score_b)
+            score_b=score_b,
+            n_score=score_n)
     run:
         print('hey! Running target filtering, deamination, quality filtering and duplicate removal :)')
         pass
@@ -160,27 +160,29 @@ rule uniq_q25_l35:
 #mv {params.unique_sum}  $(dirname {output.bam})
 
 #keeping the . for now as a 0 should we?
-rule filter_control_sites:
+rule filter_control_sites_b_score:
     input:
         control_sites = get_bed,
         control= get_control,
     output:
-        sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/sites_{b_score}.filtered.txt",
+        sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/sites_b_{score_b}_n_{n_score}.filtered.txt",
     params:
         b_score=score_b,
+        n_score=score_n
     threads: 1
-    #conda: "envs/processing.yaml"
+    conda: "envs/processing.yaml"
     shell: """
-        Rscript scripts/filter_SNPs.R {score_b} {input.control_sites} {input.control} {output.sites_filtered}
+        Rscript scripts/filter_SNPs.R {score_b} {input.control_sites} {input.control} {output.sites_filtered} {params.n_score}
     """
 
 rule filter_bam_by_control_sites:
     input:
-        sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/sites_{score_b}.filtered.txt",
+        sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/sites_b_{score_b}_n_{n_score}.filtered.txt",
+        #sites_filtered=get_control,
         bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.bam",
     output:
-        sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam",
-        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bai",
+        sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bam",
+        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bai",
     threads: 1
     #conda: "envs/processing.yaml"
     shell: """
@@ -190,15 +192,15 @@ rule filter_bam_by_control_sites:
 
 
 rule deam_filter:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam"
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bam"
     output:
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
-            bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bai",
-            stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.deam53x3.stats"
+            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bam",
+            bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bai",
+            stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.deam53x3.stats"
     #conda: "envs/processing.yaml"
     params:
-        unique_bam="{indexlibid}.deam53x3.bam",
-        new_bam="{indexlibid}.bam"
+        unique_bam="{indexlibid}_n_{n_score}.deam53x3.bam",
+        new_bam="{indexlibid}_n_{n_score}.bam"
     shell: """
     /home/mmeyer/perlscripts/solexa/analysis/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} &> {output.stats}
     mv {params.unique_bam}  {params.new_bam}
@@ -214,20 +216,24 @@ rule deam_filter:
 
 rule kraken:
     input:
-        expand(["{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.kraken_spc",
-            "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.byread",
+        expand(["{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.kraken_spc",
+            "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.byread",
             "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.kraken_spc",
             "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.byread",
-            "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.kraken_spc",
-            "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.byread",
+            "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.kraken_spc",
+            "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.byread",
             "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.kraken_spc",
             "{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.byread",
             "{project}/split/{indexlibid}/{probeset}/{indexlibid}.kraken_spc",
-            "{project}/split/{indexlibid}/{probeset}/{indexlibid}.byread"],
+            "{project}/split/{indexlibid}/{probeset}/{indexlibid}.byread",
+            "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/split_kraken/{indexlibid}_n_{n_score}.k_Primates.bam",
+            "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/deam/{indexlibid}_n_{n_score}.k_{kraken_group}.bam"],
             indexlibid=INDEXLIBID,
             probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
             project=project,
-            score_b=score_b)
+            score_b=score_b,
+            n_score=score_n,
+            kraken_group = kraken_group)
     run:
         print('hey! Running Kraken')
         pass
@@ -235,9 +241,9 @@ rule kraken:
 
 rule bam_to_fasta:
     input:
-        bam="{indexlibid}.bam"
+        bam="{indexlibid}_n_{n_score}.bam"
     output:
-        fa="{indexlibid}.fa.gz"
+        fa="{indexlibid}_n_{n_score}.fa.gz"
     threads: 1
    # conda: "envs/kraken.yaml"
     shell: """
@@ -245,17 +251,17 @@ rule bam_to_fasta:
      """
 
 rule generic_kraken:
-    input: fa="{indexlibid}.fa.gz"
-    output: kraken="{indexlibid}.kraken"
+    input: fa="{indexlibid}_n_{n_score}.fa.gz"
+    output: kraken="{indexlibid}_n_{n_score}.kraken"
     threads: 1
-   # conda: "envs/kraken.yaml"
+    conda: "envs/kraken.yaml"
     shell: """
 
-     if [ $(hostname) != "bionc13" ] ; then 
-         echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
-         sleep 30
-         stop
-     fi
+    # if [ $(hostname) != "bionc13" ] ; then 
+     #    echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
+      #   sleep 30
+       #  stop
+      #fi
 
     echo THIS FAILS IF THE KRAKEN DB IS NOT COPIED - fix it
 
@@ -268,17 +274,17 @@ rule generic_kraken:
     """
 
 rule generic_kraken_summary:
-    input: kraken="{indexlibid}.kraken"
-    output: phylo="{indexlibid}.kraken_phylo"
+    input: kraken="{indexlibid}_n_{n_score}.kraken"
+    output: phylo="{indexlibid}_n_{n_score}.kraken_phylo"
     threads: 1
    # conda: "envs/kraken.yaml"
     shell: """
 
-    if [ $(hostname) != "bionc13" ] ; then 
-         echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
-         sleep 30
-         stop
-    fi
+   # if [ $(hostname) != "bionc13" ] ; then 
+    #     echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
+     #    sleep 30
+      #   stop
+    #fi
 
     echo 'making report..'
     ## translate file has info on each read (but not in an easy-to-digest way)
@@ -287,9 +293,9 @@ rule generic_kraken_summary:
     """
 
 rule generic_kraken_spc_summary:
-    input: spc_krak="{indexlibid}.kraken_phylo",
+    input: spc_krak="{indexlibid}_n_{n_score}.kraken_phylo",
         #spc_groups="/mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/data/major_species_groups.txt"
-    output: spc_summary="{indexlibid}.kraken_spc"
+    output: spc_summary="{indexlibid}_n_{n_score}.kraken_spc"
   #  conda: "envs/kraken.yaml"
     shell: """
     
@@ -334,16 +340,16 @@ rule generic_kraken_spc_summary:
 
 
 rule generic_kraken_translate:
-    input: kraken="{indexlibid}.kraken"
-    output: translate="{indexlibid}.translate"
+    input: kraken="{indexlibid}_n_{n_score}.kraken"
+    output: translate="{indexlibid}_n_{n_score}.translate"
     threads: 1
     shell: """
 
-    if [ $(hostname) != "bionc13" ] ; then 
-         echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
-         sleep 30
-         stop
-    fi
+   # if [ $(hostname) != "bionc13" ] ; then 
+    #     echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
+     #    sleep 30
+      #   stop
+    #fi
 
     echo 'making report..'
     ## translate file has info on each read (but not in an easy-to-digest way)
@@ -353,8 +359,8 @@ rule generic_kraken_translate:
     """
 
 rule generic_kraken_byread:
-    input: translate="{indexlibid}.translate"
-    output: byread="{indexlibid}.byread"
+    input: translate="{indexlibid}_n_{n_score}.translate"
+    output: byread="{indexlibid}_n_{n_score}.byread"
     threads: 1
     shell: """
 
@@ -363,30 +369,132 @@ rule generic_kraken_byread:
 
     """
 
+
+##############################################
+#split kraken for deam
+##############################################
+
+rule generic_kraken_extract_after_deam:
+    input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bam",
+           kraken = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.kraken",
+           translate = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.translate"
+    output: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/split_kraken/{indexlibid}_n_{n_score}.k_{kraken_group}.bam"
+    wildcard_constraints:
+       # kcat = "|\.swp_third|\.swp_original|\.swp_masked",
+        #kraken_group = "Primates"
+    threads: 1
+    shell: """
+    
+  #  if [ $(hostname) != "bionc13" ] ; then 
+   #      echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
+    #     sleep 30
+     #    stop
+   # fi
+
+    echo 'finding clade'
+    clade=$(awk '$2 == "'{wildcards.kraken_group}'" {{print $1}}' /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/data/clade_taxa_map_alphanum.txt)
+    echo clade $clade
+    ofile=$(dirname {output.bam})/$(basename {output.bam} .bam)
+    echo ofile $ofile
+    
+    ## save the header first (doesn't kraken_report just overwrite this?)
+    # samtools view -H -b {input.bam} > {output.bam}
+
+    echo 'splitting bam..'
+    ## translate file has info on each read (but not in an easy-to-digest way)
+    ## have to write to the correct file - this doesn't take an ofile, which is maddening...
+    python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/kraken_report.py --db /mnt/ramdisk/refseqReleaseKraken {input.kraken} --extractFile {input.bam} \
+       --clades $clade --extract-out-base $ofile  > /dev/null
+
+    """
+
+##############################################
+#split kraken before deam filtering
+##############################################
+
+
+rule generic_kraken_extract_before_deam:
+    input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bam",
+           kraken = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.kraken",
+           translate = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.translate"
+    output: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/{indexlibid}_n_{n_score}.k_{kraken_group}.bam"
+    wildcard_constraints:
+       # kcat = "|\.swp_third|\.swp_original|\.swp_masked",
+      #  kraken_group = "Primates"
+    threads: 1
+    shell: """
+    
+  #  if [ $(hostname) != "bionc13" ] ; then 
+   #      echo KRAKEN MUST BE RUN ON BIONC13. SLEEPING 30 SECONDS.
+    #     sleep 30
+     #    stop
+   # fi
+
+    echo 'finding clade'
+    clade=$(awk '$2 == "'{wildcards.kraken_group}'" {{print $1}}' /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/data/clade_taxa_map_alphanum.txt)
+    echo clade $clade
+    ofile=$(dirname {output.bam})/$(basename {output.bam} .bam)
+    echo ofile $ofile
+    
+    ## save the header first (doesn't kraken_report just overwrite this?)
+    # samtools view -H -b {input.bam} > {output.bam}
+
+    echo 'splitting bam..'
+    ## translate file has info on each read (but not in an easy-to-digest way)
+    ## have to write to the correct file - this doesn't take an ofile, which is maddening...
+    python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/kraken_report.py --db /mnt/ramdisk/refseqReleaseKraken {input.kraken} --extractFile {input.bam} \
+       --clades $clade --extract-out-base $ofile  > /dev/null
+
+    """
+
+rule deam_filter_after_kraken:
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/{indexlibid}_n_{n_score}.k_{kraken_group}.bam"
+    output:
+            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/deam/{indexlibid}_n_{n_score}.k_{kraken_group}.bam",
+            bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/deam/{indexlibid}_n_{n_score}.k_{kraken_group}.bai",
+            stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/deam/{indexlibid}_n_{n_score}.k_{kraken_group}.deam53x3.stats"
+    #conda: "envs/processing.yaml"
+    params:
+        unique_bam="{indexlibid}_n_{n_score}.k_{kraken_group}.deam53x3.bam",
+        new_bam="{indexlibid}_n_{n_score}.k_{kraken_group}.bam"
+    shell: """
+    /home/mmeyer/perlscripts/solexa/analysis/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} &> {output.stats}
+    mv {params.unique_bam}  {params.new_bam}
+    mv {params.new_bam} $(dirname {output.bam})
+    samtools index {output.bam} {output.bai}
+    """
+
+
 ##############################################
 #summary
 ##############################################
 rule summaries:
     input:
-        expand(["{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_burden_SNPs_plot.pdf",
-        "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/{indexlibid}.L30-1000_MQ0.plots.pdf",
-        "{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}.pipeline_summary.txt",
-        "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/{indexlibid}.anno_damage.txt",
-        "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.read_summary.txt.gz",
-        "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.read_summary.txt.gz"],
+        expand([#"{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_coverage_plot.pdf",
+        #"{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}.pipeline_summary.txt",
+       # "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam_stats/{indexlibid}_n_{n_score}.summary_damage.txt",
+       # "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.read_summary.txt.gz",
+        #"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.read_summary.txt.gz",
+       # "{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_kraken_order_byburden.pdf",
+        #"{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_kraken_fam_spe_byburden.pdf",
+        #"{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_SNPs_number_cov_combined.pdf",
+       # "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/deam_stats/{indexlibid}_n_{n_score}.k_{kraken_group}.summary_damage.txt"
+       "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam_stats/{indexlibid}_n_{n_score}_new.summary_damage.txt"],
         indexlibid=INDEXLIBID,
         probeset=indexlibid_df.loc[INDEXLIBID, "probeset"],
         project=project,
-        score_b=score_b)
+        score_b=score_b,
+        n_score=score_n,
+        kraken_group = kraken_group)
     run:
         print('hey! Creating summaries')
         pass
 
 #create coverage file
 rule cov_bed_files:
-    input: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam"
+    input: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bam"
     output:
-            cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.cov"
+            cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.cov"
     shell:"""
             samtools mpileup -B {input} > {output.cov}
             """
@@ -395,14 +503,16 @@ rule cov_bed_files:
 rule pipeline_summary:
     input:
         map_bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
-        target_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam",
+        target_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bam",
         rmdup_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.bam",
-        rmdup_stats="summary_stats_L35MQ25.txt"
+       # rmdup_stats="summary_stats_L35MQ25.txt",
+        deam_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bam",
+        split_kraken="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/split_kraken/{indexlibid}_n_{n_score}.k_{kraken_group}.bam"
     output:
-        summary_annotated="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}.pipeline_summary.txt"
+        summary_annotated="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}.k_{kraken_group}.pipeline_summary.txt"
     shell:
         """
-        splitbam="{wildcards.project}/split/{wildcards.probeset}/{wildcards.indexlibid}.bam"
+        splitbam="{wildcards.project}/split/{wildcards.indexlibid}/{wildcards.probeset}/{wildcards.indexlibid}.bam"
         #ls $splitbam
 
         if [ -e $splitbam ] ; then
@@ -411,24 +521,32 @@ rule pipeline_summary:
           sc="NA"
         fi
 
-        #tmp=$(mktemp)
+        # Get read counts for each input BAM file
+        map_bam_reads=$(samtools view -c {input.map_bam})
+        rmdup_bam_reads=$(samtools view -c {input.rmdup_bam})
+        target_bam_reads=$(samtools view -c {input.target_bam})
+        deam_bam_reads=$(samtools view -c {input.deam_bam})
+        primates=$(samtools view -c {input.split_kraken})
+
         tmp={output.summary_annotated}
 
-        echo IndexLibID probeset ref split mapped \
-        $(head -n1 {input.rmdup_stats} | cut -f2- | sed 's/&//g' | sed 's/%/pct_/g' | sed 's/raw/target/g') \
-        primate | tr ' ' '\t' > $tmp
+        echo IndexLibID probeset split mapped rmdup target deam primates  | tr ' ' '\t' > $tmp
 
-        echo {wildcards.indexlibid} {wildcards.probeset} \
-        $(samtools view -c {input.map_bam}) \
-        $(tail -n1 {input.rmdup_stats} | cut -f2-) \
+        echo {wildcards.indexlibid} {wildcards.n_score} {wildcards.probeset} \
+        $sc \
+        $map_bam_reads \
+        $rmdup_bam_reads \
+        $target_bam_reads \
+        $deam_bam_reads \
+        $primates \
         | tr ' ' '\t' >> $tmp
         """
 
 #create a file indicating every info for each read
 rule bam_read_summary_target:
-     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.bam",
+     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bam",
             control=get_control_info
-     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.read_summary.txt.gz"
+     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.read_summary.txt.gz"
      shell: """
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
      	    time /home/benjamin_vernot/miniconda3/bin/python /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/bam_basic_stats_pysam2.py \
@@ -440,9 +558,9 @@ rule bam_read_summary_target:
             """
 
 rule bam_read_summary_deam:
-     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
+     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bam",
             control=get_control_info
-     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.read_summary.txt.gz"
+     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.read_summary.txt.gz"
      shell: """
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
      	    time /home/benjamin_vernot/miniconda3/bin/python /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/bam_basic_stats_pysam2.py \
@@ -454,44 +572,125 @@ rule bam_read_summary_deam:
             """
 
 #deam summaries files
-rule deam_plot:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
-    output: plots="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/{indexlibid}.L30-1000_MQ0.plots.pdf",
-    params: bam="../{indexlibid}.bam",
+rule deam_stats:
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bam",
+    output: stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam_stats/{indexlibid}_n_{n_score}.L30-1000_MQ0.3p_dinucleotide_refbase_composition.txt ",
+    params: bam="../{indexlibid}_n_{n_score}.bam",
+            summary="{indexlibid}_n_{n_score}.summary_damage.txt"
     shell: """
             cd $(dirname {output.plots})
             /home/mmeyer/perlscripts/solexa/analysis/substitution_patterns.pl {params.bam} 
             """
 
-rule deam_summaries:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}.bam",
-    output: summary="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/{indexlibid}.summary_damage.txt"
-    shell: """    
-            /home/mmeyer/perlscripts/solexa/analysis/summarize_CT_frequencies.pl -screen > {output.summary}
-           """
+#deam summaries files
+#rule deam_stats_split:
+ #   input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/deam/{indexlibid}_n_{n_score}.k_{kraken_group}.bam",
+  #  output: plots="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/deam_stats/{indexlibid}_n_{n_score}.k_{kraken_group}.L30-1000_MQ0.plots.pdf",
+   #         summary="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/split_kraken/deam_stats/{indexlibid}_n_{n_score}.k_{kraken_group}.summary_damage.txt"
+    #params: bam="../{indexlibid}_n_{n_score}.k_{kraken_group}.bam",
+     #       summary="{indexlibid}_n_{n_score}.k_{kraken_group}.summary_damage.txt"
+   # shell: """
+    #        cd $(dirname {output.plots})
+     #       /home/mmeyer/perlscripts/solexa/analysis/substitution_patterns.pl {params.bam} 
+      #      /home/mmeyer/perlscripts/solexa/analysis/summarize_CT_frequencies.pl -screen  > {params.summary}
+       #     """
 
-rule annotate_deam_summary:
-    input: damage="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/{indexlibid}.summary_damage.txt"
-    output: damage_annotated="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/{indexlibid}.anno_damage.txt",
-    shell:
-        """
-        sed 1d {input.damage} | tr '-' '\t' | cut -f 3- | awk  'BEGIN {{OFS="\t"}} {{print "{wildcards.indexlibid}", "{wildcards.probeset}", $0}}' > {output.damage_annotated}
-        """
 
-#create necessary plots
+#new deam summaries files
+rule new_deam_stats_split:
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bam",
+    output: summary_new="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam_stats/{indexlibid}_n_{n_score}_new.summary_damage.txt"
+    params:  summary_new="{indexlibid}_n_{n_score}_new.summary_damage.txt"
+    shell: """
+            /home/mmeyer/perlscripts/solexa/analysis/quick_substitutions.pl {input.bam} > {output.summary_new}
+            """
+
+
+#rule deam_summaries:
+ #   input: plots="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/n_{n_score}/{indexlibid}_n_{n_score}.L30-1000_MQ0.plots.pdf",
+  #  output: summary="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/n_{n_score}/{indexlibid}_n_{n_score}.summary_damage.txt"
+   # params:"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/deam_stats/n_{n_score}/"
+    #shell: """    
+     #       cd {params}
+      #      /home/mmeyer/perlscripts/solexa/analysis/summarize_CT_frequencies.pl -screen 
+       #    """
+
+#rule annotate_deam_summary:
+ #   input: damage="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam_stats/{indexlibid}_n_{n_score}.summary_damage.txt"
+  #  output: damage_annotated="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam_stats/{indexlibid}_n_{n_score}.anno_damage.txt",
+   # shell:
+    #    """
+     #   echo -e "IndexLibID\tProbeset\t5'CT\t3'CT\t5'#refC\t3'#refC\t5'CT_95CI\t3'CT_95CI" > {output.damage_annotated}
+      #  sed 1d {input.damage} | tr '-' '\t' | cut -f 3- | awk  'BEGIN {{OFS="\t"}} {{print "{wildcards.indexlibid}", "{wildcards.probeset}", $0}}' > {output.damage_annotated}
+       # """
+
+#create plots kraken, coverage, SNPs, %primates
 rule plot_per_lib:
     input:
-        cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.cov",
-        kraken="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.byread",
-        primate="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}.read_summary.txt.gz",
+        cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.cov",
+        kraken="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.byread",
+        primate="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.read_summary.txt.gz",
         burden=get_bed,
     output:
-        "{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_burden_SNPs_plot.pdf"
+        "{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_coverage_plot.pdf"
     params:
         output_dir="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/",
+         n_score=score_n
     run:
         shell(f"""
-			Rscript scripts/primates_coverage_kraken_SNPs_burden_plot.R {score_b} {input.burden} {input.cov} {input.kraken} {input.primate} {params.output_dir}
+			Rscript scripts/primates_coverage_kraken_SNPs_burden_plot.R {score_b} {input.burden} {input.cov} {input.kraken} {input.primate} {params.output_dir} {params.n_score}
 		""")
+
+
+#create plots kraken by burden score
+rule plot_kraken_by_burden:
+    input:
+        burden=get_bed,
+        kraken_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.byread",
+        kraken_info_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.read_summary.txt.gz",
+        kraken_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.byread",
+        kraken_info_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.read_summary.txt.gz",
+    output:
+        order="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_kraken_order_byburden.pdf",
+        fam_spe="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_kraken_fam_spe_byburden.pdf"
+    params:
+        output_dir="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/",
+        n_score=score_n
+    run:
+        shell(f"""
+			Rscript scripts/kraken_plot_by_burden.R {input.burden} {input.kraken_info_target} {input.kraken_target} {input.kraken_info_deam}  {input.kraken_deam} {params.output_dir}  {params.n_score}
+		""")
+
+
+#create plot combining cov and snps
+rule plot_cov_snps:
+    input:
+        cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.cov",
+        burden=get_bed,
+    output:
+        "{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_SNPs_number_cov_combined.pdf"
+    params:
+        output_dir="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/",
+        n_score=score_n
+    run:
+        shell(f"""
+			Rscript scripts/combined_snps_cov.R {input.cov} {input.burden} {params.output_dir}  {params.n_score}
+		""")
+
+#create deam and summary table for all libraries analyzed in the pipeline
+#rule summary_deam_all:
+ #   input:
+  #      dir_deam= "{project}/",
+   #     dir_summary="{project_summary}/"
+    #output:
+     #   summary_all="{project_summary}/all_summaries.txt",
+      #  deam_all="{project_summary}/all_deam.txt"
+   # params:
+    #    b
+     #   n_score=score_n
+   # run:
+    #    shell(f"""
+	#		Rscript scripts/save_all_summaries_pipeline.R {input.dir_deam} {input.dir_summary} {output.summary_all} {output.deam_all}
+	#	""")
 
 
