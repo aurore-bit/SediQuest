@@ -159,26 +159,26 @@ rule uniq_q25_l35:
  # bam-rmdup -o {output.bam} -q 25 -l 35 {input.bam}
 #mv {params.unique_sum}  $(dirname {output.bam})
 
-#keeping the . for now as a 0 should we?
+#this is needed if you want to filter for burden score!!!!! 
 rule filter_control_sites_b_score:
     input:
         control_sites = get_bed,
         control= get_control,
     output:
-        sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/sites_b_{score_b}_n_{n_score}.filtered.txt",
+         sites_filtered = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/sites_b_{score_b}_n_{n_score}.filtered.txt",
     params:
-        b_score=score_b,
-        n_score=score_n
+       b_score = "{score_b}",
+       n_score = "{n_score}",
     threads: 1
     conda: "envs/processing.yaml"
     shell: """
-        Rscript scripts/filter_SNPs.R {score_b} {input.control_sites} {input.control} {output.sites_filtered} {params.n_score}
+        Rscript scripts/filter_SNPs.R {params.b_score} {input.control_sites} {input.control} {output.sites_filtered} {params.n_score}
     """
 
 rule filter_bam_by_control_sites:
     input:
-        sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/sites_b_{score_b}_n_{n_score}.filtered.txt",
-        #sites_filtered=get_control,
+        #sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/sites_b_{score_b}_n_{n_score}.filtered.txt",
+        sites_filtered=get_control,
         bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.bam",
     output:
         sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.bam",
@@ -471,7 +471,7 @@ rule deam_filter_after_kraken:
 rule summaries:
     input:
         expand([#"{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_coverage_plot.pdf",
-        #"{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}.pipeline_summary.txt",
+        "{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}.k_{kraken_group}.new.pipeline_summary.txt",
        # "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam_stats/{indexlibid}_n_{n_score}.summary_damage.txt",
        # "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.read_summary.txt.gz",
         #"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.read_summary.txt.gz",
@@ -507,9 +507,10 @@ rule pipeline_summary:
         rmdup_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.bam",
        # rmdup_stats="summary_stats_L35MQ25.txt",
         deam_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.bam",
-        split_kraken="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/split_kraken/{indexlibid}_n_{n_score}.k_{kraken_group}.bam"
+        split_kraken="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/split_kraken/{indexlibid}_n_{n_score}.k_{kraken_group}.bam",
+        deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam_stats/{indexlibid}_n_{n_score}_new.summary_damage.txt"
     output:
-        summary_annotated="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}.k_{kraken_group}.pipeline_summary.txt"
+        summary_annotated="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}.k_{kraken_group}.new.pipeline_summary.txt"
     shell:
         """
         splitbam="{wildcards.project}/split/{wildcards.indexlibid}/{wildcards.probeset}/{wildcards.indexlibid}.bam"
@@ -528,17 +529,32 @@ rule pipeline_summary:
         deam_bam_reads=$(samtools view -c {input.deam_bam})
         primates=$(samtools view -c {input.split_kraken})
 
+        # Get deam stats (5'CT, 3'CT, 5'CT_95CI, 3'CT_95CI, cond5'CT_95CI, cond3'CT_95CI) from deam_stats file
+        deam_stats_file="{input.deam}"
+        deam_5CT=$(awk 'NR==2 {{print $2}}' $deam_stats_file)
+        deam_3CT=$(awk 'NR==2 {{print $3}}' $deam_stats_file)
+        deam_5CT_95CI=$(awk 'NR==2 {{print $4}}' $deam_stats_file)
+        deam_3CT_95CI=$(awk 'NR==2 {{print $5}}' $deam_stats_file)
+        deam_cond5CT_95CI=$(awk 'NR==2 {{print $10}}' $deam_stats_file)
+        deam_cond3CT_95CI=$(awk 'NR==2 {{print $11}}' $deam_stats_file)
+
         tmp={output.summary_annotated}
 
         echo IndexLibID probeset split mapped rmdup target deam primates  | tr ' ' '\t' > $tmp
 
-        echo {wildcards.indexlibid} {wildcards.n_score} {wildcards.probeset} \
+        echo {wildcards.indexlibid} {wildcards.n_score} {wildcards.score_b} {wildcards.probeset} \
         $sc \
         $map_bam_reads \
         $rmdup_bam_reads \
         $target_bam_reads \
         $deam_bam_reads \
         $primates \
+        "$deam_5CT" \
+        "$deam_3CT" \
+        "$deam_5CT_95CI" \
+        "$deam_3CT_95CI" \
+        "$deam_cond5CT_95CI" \
+        "$deam_cond3CT_95CI" \
         | tr ' ' '\t' >> $tmp
         """
 

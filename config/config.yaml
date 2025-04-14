@@ -1,13 +1,21 @@
-prefix: test
 
-# path to samples sheet (libID, probeset, seqrun, split_BAM_path, etc)
-samples_info: config/samples.csv
+#this run with pipeline.local.smk
+prefix: output_v0
 
-#path to probeset sheet (probeset, path_to_ref, path_to_bed)
+# path to samples sheet (indexlibid, probeset, seqrun, split_BAM_path, etc)
+samples_info: config/arev_samples.csv
+
+#path to probeset sheet (probeset, path_to_ref, path_to_bed, path_to_control)
 probeset_info: config/probeset.csv
 
 #project folder
-project: output_v0
+project: output_v0  
 
-#summary folder
-summary: output_v0_summary
+#b score info
+score_b: "ALL"
+
+#n_score
+score_n: 0
+
+#kraken group to extract
+kraken_group: Primates

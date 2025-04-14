@@ -1,5 +1,0 @@
-probeset	indexlibid	P7	P5	ReampLibID	SampleID	ExtractID	LysateID	Site	Description	tag_group	group_general	site_tag	category	bam	seqrun	Proc	Lane	MapParams	RefType	split_method	tag_libname	tag_libname_og	shotgun	mt_mam	Comments	Pool	tag_depth_filter_thresh
-##Arev sample
-#1240k	A48095	1289	1113		SP.C.4557			Ranis			HST_like			/mnt/ngs_data/210816_NS500559_0091_AH3YY3AFX3_N12128/results/final/s_all_sequence.bam	210816_NS500559_0091_AH3YY3AFX3_N12128	proc1	s_1	BWA_ancient	third_allele	exact		Ranis					
-#Pendant sample
-ssAA204	A34595	1299	1059		SP.B.1077			Artefact			HST_like			../sediment_pipeline_test/test_arev_bone/splitbams/210923_K00233_0225_AHMK5FBBXY_PEdi_BN_JR/proc_1/s_2/split_exact/A34595.bam	210923_K00233_0225_AHMK5FBBXY_PEdi_BN_JR	proc_1	s_2	BWA-ancient	third_allele	exact							
