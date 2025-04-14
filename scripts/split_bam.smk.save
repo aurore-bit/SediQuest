@@ -1,0 +1,100 @@
+indexlibid_df = pd.read_table(bam_to_split.csv)
+INDEXLIBID = indexlibid_df.index.unique()
+
+# Retrieve BAM file paths from the indexlibid dataframe
+def get_bam(wildcards):
+    return indexlibid_df.loc[wildcards.indexlibid, "bam"]
+
+
+
+
+    rule:
+        input:
+            ogbam = get_bam
+        output:
+            splitbams = "/mnt/expressions/Aurore/sediment_pipeline_v0/overview_output/split/{indexlibid}/{probeset}/{indexlibid}.bam",
+            ids = ids
+        run:
+
+            # _script = "/home/mmeyer/perlscripts/solexa/filework/splitBAM.pl",
+            print('hey making id file')
+            print(input.ogbam)
+            print(output.ids)
+            ids = _get_ids_from_ids_filename(output.ids)
+            # print(ids)
+            # output.ids = open(output.ids + '.tmp', 'wt')
+            output.ids = open(output.ids, 'wt')
+            print('#index\tp7\tp5', file=output.ids)
+            for id in ids:
+                print('{indexlibid}\t{p7}\t{p5}'.format(**id._asdict()), file=output.ids)
+                pass
+            output.ids.close()
+
+            cmd = "cp %s %s.tmp" % (output.ids.name, output.ids.name)
+            print('WHAT')
+            print(cmd)
+            print('WHAT')
+            shell(cmd)
+
+            print('hey splitting ogbam')
+            print(input.ogbam)
+            print(output.ids)
+            print(output.splitbams)
+            outdir = os.path.dirname(output.splitbams[0])
+            #s = f"cd {outdir}; time /home/mmeyer/perlscripts/solexa/filework/splitBAM.pl -byfile ids.txt {input.ogbam} > split_stats.txt"
+            s = "cd %s; time /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/splitBAM.pl -byfile ids.txt %s > split_stats.txt" % (outdir, input.ogbam)
+            #s = "time /home/mmeyer/perlscripts/solexa/filework/splitBAM.pl -byfile {input.ids} {input.ogbam} > split_stats.txt"
+            print(s)
+            shell(s)
+            pass
+
+
+indexlibid_df = pd.read_table(bam_to_split.csv)
+INDEXLIBID = indexlibid_df.index.unique()
+
+# Retrieve BAM file paths from the indexlibid dataframe
+def get_bam(wildcards):
+    return indexlibid_df.loc[wildcards.indexlibid, "bam"]
+
+
+
+
+    rule:
+        input:
+            ogbam = get_bam
+        output:
+            splitbams = "/mnt/expressions/Aurore/sediment_pipeline_v0/overview_output/split/{indexlibid}/{probeset}/{indexlibid}.bam",
+            ids = ids
+        run:
+            
+            # _script = "/home/mmeyer/perlscripts/solexa/filework/splitBAM.pl",
+            print('hey making id file')
+            print(input.ogbam)
+            print(output.ids)
+            ids = _get_ids_from_ids_filename(output.ids)
+            # print(ids)
+            # output.ids = open(output.ids + '.tmp', 'wt')
+            output.ids = open(output.ids, 'wt')
+            print('#index\tp7\tp5', file=output.ids)
+            for id in ids:
+                print('{indexlibid}\t{p7}\t{p5}'.format(**id._asdict()), file=output.ids)
+                pass
+            output.ids.close()
+
+            cmd = "cp %s %s.tmp" % (output.ids.name, output.ids.name)
+            print('WHAT')
+            print(cmd)
+            print('WHAT')
+            shell(cmd)
+            
+            print('hey splitting ogbam')
+            print(input.ogbam)
+            print(output.ids)
+            print(output.splitbams)
+            outdir = os.path.dirname(output.splitbams[0])
+            #s = f"cd {outdir}; time /home/mmeyer/perlscripts/solexa/filework/splitBAM.pl -byfile ids.txt {input.ogbam} > split_stats.txt"
+            s = "cd %s; time /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/splitBAM.pl -byfile ids.txt %s > split_stats.txt" % (outdir, input.ogbam)
+            #s = "time /home/mmeyer/perlscripts/solexa/filework/splitBAM.pl -byfile {input.ids} {input.ogbam} > split_stats.txt"
+            print(s)
+            shell(s)
+            pass

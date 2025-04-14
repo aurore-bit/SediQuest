@@ -3,18 +3,21 @@ library(tidyverse)
 
 args <- commandArgs(trailingOnly = TRUE)
 score_b <- as.numeric(args[1])  # The first argument is the score_b
-temp_sites <- args[2]
-path_to_burden <- args[3]
-path_to_control <- args[4]
+path_to_burden <- args[2]
+path_to_control <- args[3]
+output <- args[4]
+score_n <- as.numeric(args[5])
 
 burden_score <- fread(path_to_burden) %>%
-  filter(b_3 != ".") %>%
-  mutate(b_3 = as.numeric(as.character(b_3))) %>%
-  filter(b_3 >= score_b)
+   dplyr::filter(b_3 != ".") %>%
+   dplyr::mutate(b_3 = as.numeric(as.character(b_3))) %>%
+   dplyr::filter(b_3 >= score_b) %>%
+   dplyr::mutate(n_3 = as.numeric(as.character(n_3))) %>%
+   dplyr::filter(n_3 >= score_n)
 
 new_bed <- fread(path_to_control) %>%
-  rename(pos0 = V2,
-         pos = V3) %>%
-  filter(pos0 %in% burden_score$pos0 & pos %in% burden_score$pos)
+   dplyr::rename(chrom = V1, pos0 = V2, pos = V3) %>%
+  inner_join(burden_score, by = c("chrom", "pos0", "pos")) %>%
+   dplyr::select(chrom, pos0, pos, V4, V5, V6, V7, V8, V9)
 
-fwrite(new_bed, temp_sites, sep = "\t", col.names = FALSE)
+fwrite(new_bed, output, sep = "\t", col.names = FALSE)
