@@ -1,4 +1,17 @@
-For mapping
-snakemake map_all --snakefile pipeline.local.smk --configfile config/config.yaml --cores 25
-For processing
-snakemake processing --snakefile pipeline.local.smk --configfile config/config.yaml --cores 25
+How to run Sediquest:
+
+You need to have a config file, a table for nuclear probes where you should put all these following files:
+A table with sample information which should contain:
+
+Let's start:
+1- Check if you mapped your bam file to the correct genome and sort your bam file
+snakemake check_mapped --snakefile pipeline.local.firstart.smk --configfile config/config.yaml --cores 25
+
+2- Start to filter your bam file for quality and length, remove duplicates and filter for deaminated reads
+snakemake process_all --snakefile pipeline.local.firstart.smk --configfile config/config.yaml --cores 25
+
+3- Run kraken for every step to get insightful idea about what is in your data at each steps
+snakemake kraken --snakefile pipeline.local.firstart.smk --configfile config/config.yaml --cores 25
+
+4- Run the rule that allow you to have a summary table for each bam file and various plots
+snakemake summary --snakefile pipeline.local.firstart.smk --configfile config/config.yaml --cores 25
