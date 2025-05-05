@@ -1,5 +1,5 @@
 config/
-scripts/
+scripts_new/
 .idea/
 .snakemake/
 README.new
