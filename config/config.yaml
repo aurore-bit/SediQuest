@@ -1,0 +1,19 @@
+prefix: [output_folder]
+
+# path to samples sheet (indexlibid, probeset, seqrun, split_BAM_path, etc)
+samples_info: config/overview.csv
+
+#path to probeset sheet (probeset, path_to_ref, path_to_bed, path_to_control)
+probeset_info: config/probeset.csv
+
+#project folder
+project: overview_output 
+
+#b score info
+score_b: "ALL"
+
+#n_score
+score_n: "ALL"
+
+#kraken group to extract
+kraken_group: Primates

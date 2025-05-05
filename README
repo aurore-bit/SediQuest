@@ -1,9 +1,12 @@
 How to run Sediquest:
 
-You need to have a config file, a table for nuclear probes where you should put all these following files:
-A table with sample information which should contain:
+You need to have a config file (config.yaml), a table for nuclear probes (probeset.csv) where you should put all these following files:
+A table with sample information (samples.csv) which should contain:
 
 Let's start:
+
+For running the firstart pipeline version:
+
 1- Check if you mapped your bam file to the correct genome and sort your bam file
 snakemake check_mapped --snakefile pipeline.local.firstart.smk --configfile config/config.yaml --cores 25
 
@@ -15,3 +18,17 @@ snakemake kraken --snakefile pipeline.local.firstart.smk --configfile config/con
 
 4- Run the rule that allow you to have a summary table for each bam file and various plots
 snakemake summary --snakefile pipeline.local.firstart.smk --configfile config/config.yaml --cores 25
+
+
+For running the new pipeline version:
+1- process your reads, duplication removal, quality filtering, length filtering, deam filtering 
+snakemake process_all --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
+
+2- Run kraken step 1
+snakemake kraken_step_1 --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
+
+3- Rune kraken step 2
+snakemake kraken_step_2 --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
+
+4- Run summaries
+snakemake summaries --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
