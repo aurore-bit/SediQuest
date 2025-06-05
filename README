@@ -1,4 +1,4 @@
-How to run Sediquest:
+### How to run Sediquest:
 
 You need to have a config file (config.yaml), a table for nuclear probes (probeset.csv) where you should put all these following files:
 A table with sample information (samples.csv) which should contain:
