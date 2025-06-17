@@ -1,6 +1,6 @@
 # SediQuest
 
-This pipeline is a friendly-user implementation of the Vernot et al. (2021) workflow. It aims to extract human reads from capture data to perform further analysis.
+This pipeline is a friendly-user implementation of the Vernot et al. (2021) workflow. It aims to extract human reads from capture data to perform further analysis. The set of sites used to capture the DNA is called a probeset here.
 
 ---
 
@@ -20,8 +20,8 @@ This table should include:
 | 1240k  | whole_genome_modified_1240k.fa  | mammalian_diversity_score_1240k.bed      | 1240k.bed    |
 
 - **`samples.csv`** – Table with sample information. Must include at least:
-  - `LibraryID`
-  - `Probeset`
+  - LibraryID
+  - Probeset
   
 | probeset_to_lib   | indexlibid  | 
 |--------|-----|
