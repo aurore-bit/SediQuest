@@ -42,28 +42,28 @@ python check_reference_mapping.py
 Process your reads, quality filtering, removal of duplicated, and deam filtering.
 
 ```bash
-snakemake process_all --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
+snakemake process_all --snakefile  SediQuest.smk --configfile config.yaml --cores 25
 ```
 
 ### Step 2 – Kraken step 1 
 Produce fasta file for Kraken.
 
 ```bash
-snakemake kraken_step_1 --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
+snakemake kraken_step_1 --snakefile  SediQuest.smk --configfile config.yaml --cores 25
 ```
 
 ### Step 3 – Kraken step 2
 Run Kraken.
 
 ```bash
-snakemake kraken_step_2 --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
+snakemake kraken_step_2 --snakefile  SediQuest.smk --configfile config.yaml --cores 25
 ```
 
 ### Step 4 – Summaries
 Produce a variety of plots and tables as a summary for your data
 
 ```bash
-snakemake summaries --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
+snakemake summaries --snakefile  SediQuest.smk --configfile config.yaml --cores 25
 ```
 
 ### Step 5 – Look at your data!
