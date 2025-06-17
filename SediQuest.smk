@@ -94,7 +94,7 @@ rule uniq_q25_l35:
         #unique_sum="summary_stats_L35MQ25.txt"
     shell: """
     cd $(dirname {output.bam})
-    /home/mmeyer/perlscripts/solexa/analysis/analyzeBAM.pl -nof -minlength 35 -qual 25 {params.bam} > {params.exhaust}
+    scripts_for_SediQuest/analyzeBAM.pl -nof -minlength 35 -qual 25 {params.bam} > {params.exhaust}
     mv {params.unique_bam} {params.new_bam}
     mv {params.unique_bai} {params.new_bai}
            """
@@ -112,7 +112,7 @@ rule filter_control_sites_b_score:
     threads: 1
    # conda: "envs/processing.yaml"
     shell: """
-        Rscript scripts/filter_SNPs.R {params.b_score} {input.control_sites} {input.control} {output.sites_filtered} 
+        Rscript scripts_for_SediQuest/filter_SNPs.R {params.b_score} {input.control_sites} {input.control} {output.sites_filtered} 
     """
 
 rule filter_bam_by_control_sites:
@@ -142,7 +142,7 @@ rule deam_filter:
         unique_bam="{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}.deam53x3.bam",
         new_bam="{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}_deam.bam"
     shell: """
-    /home/mmeyer/perlscripts/solexa/analysis/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} &> {output.stats}
+    scripts_for_SediQuest/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} &> {output.stats}
     mv {params.unique_bam}  {params.new_bam}
     mv {params.new_bam} $(dirname {output.bam})
     """
@@ -189,7 +189,7 @@ rule bam_to_fasta_1:
         fa_bam="{project}/mappedbams/{indexlibid}/{probeset}/kraken/{indexlibid}.fa.gz",
     threads: 1
     shell: """
-        bam2fastx -a -A -Q {input.bam} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.fa_bam}
+        bam2fastx -a -A -Q {input.bam} | scripts_for_SediQuest/lenfilter.pl 35 | gzip -c > {output.fa_bam}
     """
 
 
@@ -200,7 +200,7 @@ rule bam_to_fasta_2:
         fa_split="{project}/split/{indexlibid}/{probeset}/kraken/{indexlibid}.fa.gz",
     threads: 1
     shell: """
-         bam2fastx -a -A -Q {input.split} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.fa_split}
+         bam2fastx -a -A -Q {input.split} | scripts_for_SediQuest/lenfilter.pl 35 | gzip -c > {output.fa_split}
        """
 
 
@@ -212,7 +212,7 @@ rule bam_to_fasta_3:
         fa_bam_mapped_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.fa.gz",
     threads: 1
     shell: """
-         bam2fastx -a -A -Q {input.bam_mapped_target} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.fa_bam_mapped_target}
+         bam2fastx -a -A -Q {input.bam_mapped_target} | scripts_for_SediQuest/lenfilter.pl 35 | gzip -c > {output.fa_bam_mapped_target}
        """
 
 rule bam_to_fasta_4:
@@ -222,7 +222,7 @@ rule bam_to_fasta_4:
         fa_bam_mapped="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/kraken/{indexlibid}.fa.gz",
     threads: 1
     shell: """
-         bam2fastx -a -A -Q {input.bam_mapped} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.fa_bam_mapped}
+         bam2fastx -a -A -Q {input.bam_mapped} | scripts_for_SediQuest/lenfilter.pl 35 | gzip -c > {output.fa_bam_mapped}
        """
 
 
@@ -233,7 +233,7 @@ rule bam_to_fasta_5:
         fa_bam_mapped_target_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.fa.gz",
     threads: 1
     shell: """
-         bam2fastx -a -A -Q {input.bam_mapped_target_deam} | /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/lenfilter.pl 35 | gzip -c > {output.fa_bam_mapped_target_deam}
+         bam2fastx -a -A -Q {input.bam_mapped_target_deam} | scripts_for_SediQuest/lenfilter.pl 35 | gzip -c > {output.fa_bam_mapped_target_deam}
        """
 
 
@@ -314,7 +314,7 @@ rule generic_kraken:
     conda: "envs/kraken.yaml"
     shell: """
 
-     nproc=$(time ~frederic_romagne/kraken/install/kraken --threads {threads} --db /mnt/ramdisk/refseqReleaseKraken \
+     nproc=$(time kraken --threads {threads} --db kraken_database \
      --output {output.kraken} {input.fa} 2>&1 | grep 'processed' | cut -f1 -d' ')
      echo "count seqs {input.fa}"
      nseq=$(gunzip -c {input.fa} | grep -c -e '>' -e '@') || echo "no seqs found $nseq"
@@ -333,7 +333,7 @@ rule generic_kraken_summary:
     echo 'making report..'
     ## translate file has info on each read (but not in an easy-to-digest way)
     ## phylo file has a summary for each level in the taxonomy
-    python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/kraken_report.py --db /mnt/ramdisk/refseqReleaseKraken {input.kraken} > {output.phylo}
+    python3 scripts_for_SediQuest/kraken_report.py --db kraken_database {input.kraken} > {output.phylo}
     """
 
 rule generic_kraken_spc_summary:
@@ -392,7 +392,7 @@ rule generic_kraken_translate:
     echo 'making report..'
     ## translate file has info on each read (but not in an easy-to-digest way)
     ## phylo file has a summary for each level in the taxonomy
-    python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/kraken_report.py --db /mnt/ramdisk/refseqReleaseKraken {input.kraken} --translate {output.translate} > /dev/null
+    python3 scripts_for_SediQuest/kraken_report.py --db kraken_database {input.kraken} --translate {output.translate} > /dev/null
 
     """
 
@@ -403,7 +403,7 @@ rule generic_kraken_byread:
     shell: """
 
      echo 'parsing translate file..'
-     python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/parse_kraken_translate_file.py --translate-file {input.translate} > {output.byread}
+     python3 scripts_for_SediQuest/parse_kraken_translate_file.py --translate-file {input.translate} > {output.byread}
 
     """
 
@@ -436,7 +436,7 @@ rule generic_kraken_extract_after_deam:
     echo 'splitting bam..'
     ## translate file has info on each read (but not in an easy-to-digest way)
     ## have to write to the correct file - this doesn't take an ofile, which is maddening...
-    python3 /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/kraken_report.py --db /mnt/ramdisk/refseqReleaseKraken {input.kraken} --extractFile {input.bam} \
+    python3 kraken_database/kraken_report.py --db kraken_database {input.kraken} --extractFile {input.bam} \
        --clades $clade --extract-out-base $ofile  > /dev/null
 
     """
@@ -498,7 +498,7 @@ rule cov_average_deam_all:
             depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.depth",
             count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.count"
     shell:"""
-            /mnt/expressions/yaniv/Software/samtools-1.17/samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
+            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
             awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
             """
 
@@ -513,7 +513,7 @@ rule cov_average_deam_primates:
             depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.depth",
             count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.count"
     shell:"""
-            /mnt/expressions/yaniv/Software/samtools-1.17/samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
+            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
             awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
             """
 
@@ -529,7 +529,7 @@ rule cov_average_primates:
             depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.depth",
             count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.count"
     shell:"""
-            /mnt/expressions/yaniv/Software/samtools-1.17/samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
+            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
             awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
             """
 
@@ -546,7 +546,7 @@ rule cov_count_all:
             depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.depth",
             count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.count"
     shell:"""
-            /mnt/expressions/yaniv/Software/samtools-1.17/samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
+            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
             awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
             """
 
@@ -562,7 +562,7 @@ rule cov_count_HO_primates_deam:
             depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.depth_ho",
             count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.count_ho"
     shell:"""
-            /mnt/expressions/yaniv/Software/samtools-1.17/samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
+            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
             awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
             """
 
@@ -577,7 +577,7 @@ rule cov_count_HO_deam:
             depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.depth_ho",
             count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.count_ho"
     shell:"""
-            /mnt/expressions/yaniv/Software/samtools-1.17/samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
+            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
             awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
             """
 
@@ -592,7 +592,7 @@ rule cov_count_HO_primates:
             depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.depth_ho",
             count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.count_ho"
     shell:"""
-            /mnt/expressions/yaniv/Software/samtools-1.17/samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
+            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
             awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
             """
 
@@ -607,7 +607,7 @@ rule cov_count_HO:
             depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.depth_ho",
             count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.count_ho"
     shell:"""
-            /mnt/expressions/yaniv/Software/samtools-1.17/samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
+            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
             awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
             """
 
@@ -718,7 +718,7 @@ rule bam_read_summary_target:
      output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.read_summary.txt.gz"
      shell: """
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
-     	    time /home/benjamin_vernot/miniconda3/bin/python /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/bam_basic_stats_pysam2.py \
+     	    time scripts_for_SediQuest/bam_basic_stats_pysam2.py \
 	    	 --control {input.control} \
 		    --bam {input.bam} \
 		    --tags lib --tags-fill {wildcards.indexlibid} \
@@ -732,7 +732,7 @@ rule bam_read_summary_deam:
      output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.read_summary.txt.gz"
      shell: """
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
-     	    time /home/benjamin_vernot/miniconda3/bin/python /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/bin/bam_basic_stats_pysam2.py \
+     	    time scripts_for_SediQuest/bam_basic_stats_pysam2.py \
 	    	 --control {input.control} \
 		    --bam {input.bam} \
 		    --tags lib --tags-fill {wildcards.indexlibid} \
@@ -740,15 +740,6 @@ rule bam_read_summary_deam:
 		    | gzip -c > {output.summary}
             """
 
-#deam summaries files
-rule deam_stats:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.bam",
-    output: stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam_stats/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.L30-1000_MQ0.3p_dinucleotide_refbase_composition.txt ",
-    params: bam="../{indexlibid}_uniqL35MQ25_MD{score_b}_N{n_score}.bam"
-    shell: """
-            cd $(dirname {output.plots})
-            /home/mmeyer/perlscripts/solexa/analysis/substitution_patterns.pl {params.bam} 
-            """
 
 #new deam summaries files
 rule deam_stats_table:
@@ -756,7 +747,7 @@ rule deam_stats_table:
     output: summary_new="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam_stats/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.summary_damage.txt"
    # params:  summary_new="{indexlibid}_uniqL35MQ25_MD{score_b}_N{n_score}.summary_damage.txt"
     shell: """
-            /home/mmeyer/perlscripts/solexa/analysis/quick_substitutions.pl {input.bam} > {output.summary_new}
+            scripts_for_SediQuest/quick_substitutions.pl {input.bam} > {output.summary_new}
             """
 
 
@@ -776,8 +767,10 @@ rule plot_kraken_by_burden:
         n_score=score_n
     run:
         shell(f"""
-			Rscript scripts/kraken_plot_by_burden.R {input.burden} {input.kraken_info_target} {input.kraken_target} {input.kraken_info_deam}  {input.kraken_deam} {params.output_dir}  {params.n_score}
+			Rscript scripts_for_SediQuest/kraken_plot_by_burden.R {input.burden} {input.kraken_info_target} {input.kraken_target} {input.kraken_info_deam}  {input.kraken_deam} {params.output_dir}  {params.n_score}
 		""")
+
+
 
 
 
@@ -792,5 +785,5 @@ rule plot_cov_snps:
         output_dir="{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/"
     run:
         shell(f"""
-			Rscript scripts/combined_snps_cov.R {input.cov} {input.burden} {params.output_dir}  
+			Rscript scripts_for_SediQuest/combined_snps_cov.R {input.cov} {input.burden} {params.output_dir}  
 		""")
