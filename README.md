@@ -16,7 +16,7 @@ This table should include:
   - An optional BED file with mammalian diversity scores for filtering.
 
 | probeset   | path_to_ref | path_to_bed    | path_to_control     |
-|--------|-----|-------------|
+|--------|-----|-------------|-------------|
 | 1240k  | whole_genome_modified_1240k.fa  | mammalian_diversity_score_1240k.bed      | 1240k.bed    |
 
 - **`samples.csv`** – Table with sample information. Must include at least:
@@ -24,7 +24,7 @@ This table should include:
   - `Probeset`
   
 | probeset_to_lib   | indexlibid  | 
-|--------|-----|-------------|
+|--------|-----|
 | 1240k  | Lib.1608   |
 
 ---
