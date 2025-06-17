@@ -6,43 +6,54 @@ This pipeline is a friendly-user implementation of the Vernot et al. (2021) work
 
 ## Required Files
 
-- **`config.yaml`** – Configuration file with paths and parameters.
-- **`probeset.csv`** – Table describing the nuclear probes each sample was captured with. This table should include:
+- **`config.yaml`** – Configuration file with parameters, see config_example.yaml.
+
+- **`probeset.csv`** – Table with information about the nuclear probes each sample was captured with. 
+This table should include:
   - A BED file with target regions
-  - A modified reference genome
-  - An optional BED file with burden scores for filtering
+  - A modified reference genome where you replaced the target sites by a "third" base (see Vernot et al. 2021).
+  - A BED file with target sites.
+  - An optional BED file with mammalian diversity scores for filtering.
+
+| probeset   | path_to_ref | path_to_bed    | path_to_control     |
+|--------|-----|-------------|
+| 1240k  | whole_genome_modified_1240k.fa  | mammalian_diversity_score_1240k.bed      | 1240k.bed    |
+
 - **`samples.csv`** – Table with sample information. Must include at least:
   - `LibraryID`
   - `Probeset`
-  - Any other metadata you want to track
+  
+| probeset_to_lib   | indexlibid  | 
+|--------|-----|-------------|
+| 1240k  | Lib.1608   |
 
 ---
 
-## Quick Start
+## Start
 
 ### Step 0 – Verify Mapping
-Ensure your genome is mapped to the modified reference genome corresponding, it should be a genome where the site captured where modified to avoid reference bias.
+Ensure your genome is mapped to the modified reference genome corresponding.
 
 ```bash
 python check_reference_mapping.py  
 ```
 
 ### Step 1 – Basic processing 
-Process your reads, duplication removal, quality filtering, length filtering, and deam filtering.
+Process your reads, quality filtering, removal of duplicated, and deam filtering.
 
 ```bash
 snakemake process_all --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
 ```
 
 ### Step 2 – Kraken step 1 
-Produce fasta file for Kraken 
+Produce fasta file for Kraken.
 
 ```bash
 snakemake kraken_step_1 --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
 ```
 
 ### Step 3 – Kraken step 2
-Run Kraken and produce summaries.
+Run Kraken.
 
 ```bash
 snakemake kraken_step_2 --snakefile pipeline.local.v1.smk --configfile config/config.yaml --cores 25
@@ -56,6 +67,6 @@ snakemake summaries --snakefile pipeline.local.v1.smk --configfile config/config
 ```
 
 ### Step 5 – Look at your data!
-You can have a look at the XXX plot to have an idea about the faunal contamination in you sample and decide if you want to use a kraken or a mammalian diversity score filtering. 
+You can have a look at the coverage plot to have an idea about the faunal contamination in your sample and decide if you want to use a kraken or a mammalian diversity score filtering. 
 
 
