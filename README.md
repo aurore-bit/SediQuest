@@ -1,6 +1,6 @@
-# 🧬 How to Run SediQuest
+# SediQuest
 
-This pipeline is a reimplementation of the Vernot et al. (2021) workflow. It aims to extract human reads from capture data to perform population and contamination studies.
+This pipeline is a friendly-user implementation of the Vernot et al. (2021) workflow. It aims to extract human reads from capture data to perform further analysis.
 
 ---
 
