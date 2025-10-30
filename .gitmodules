@@ -1,0 +1,3 @@
+[submodule "ancient_dna_cpp_tools"]
+	path = ancient_dna_cpp_tools
+	url = https://github.com/yanivsw/ancient_dna_cpp_tools
