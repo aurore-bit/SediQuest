@@ -113,8 +113,8 @@ plot_kraken_target <- ggplot(final_output_kraken_target, aes(x = b_3, y = percen
   scale_fill_manual(values = order_colors) +  # Apply the custom colors
   theme_minimal() +  # Use a minimal theme
   labs(
-    title = "Kraken order assignation in cumulative percentage after target filtering",
-    x = "burden_score",
+    title = "Kraken order assignation in cumulative percentage before target filtering",
+    x = "MD score",
     y = "Percentage",
     fill = "Family"
   ) +
@@ -204,7 +204,7 @@ plot_kraken_deam <- ggplot(final_output_deam, aes(x = b_3, y = percentage, fill 
   theme_minimal() +  # Use a minimal theme
   labs(
     title = "Kraken order assignation in cumulative percentage after deam filtering",
-    x = "burden_score",
+    x = "MD score",
     y = "Percentage",
     fill = "Family"
   ) +
@@ -218,7 +218,7 @@ plot_kraken_deam <- ggplot(final_output_deam, aes(x = b_3, y = percentage, fill 
 
 plot_all_kraken_burden <- grid.arrange(plot_kraken_target, plot_kraken_deam, ncol = 2)  
 
-path_to_save <- paste0(dir_to_save,indexlibid,"_n_",n_score,"_kraken_order_byburden.pdf")
+path_to_save <- paste0(dir_to_save,indexlibid,"_kraken_order_byburden.pdf")
 ggsave(path_to_save, plot = plot_all_kraken_burden, device = "pdf", width = 14, height = 7, 
        units = "in", dpi = 300)
 
@@ -309,8 +309,8 @@ plot_kraken_fam_spe_target <- ggplot(kraken_fam_spe_target, aes(x = b_3, y = per
   #scale_fill_manual(values = family_colors) +  # Apply the custom colors
   theme_minimal() +  # Use a minimal theme
   labs(
-    title = "Kraken species/family assignation after target filtering",
-    x = "burden_score",
+    title = "Kraken species/family assignation before target filtering",
+    x = "MD score",
     y = "Percentage",
     fill = "Species/Family"
   ) +
@@ -411,7 +411,7 @@ plot_kraken_fam_spe_deam <- ggplot(kraken_fam_spe_deam, aes(x = b_3, y = percent
   theme_minimal() +  # Use a minimal theme
   labs(
     title = "Kraken species/family assignation after deam filtering",
-    x = "burden_score",
+    x = "MD score",
     y = "Percentage",
     fill = "Species/Family"
   ) +
@@ -427,6 +427,6 @@ plot_kraken_fam_spe_deam <- ggplot(kraken_fam_spe_deam, aes(x = b_3, y = percent
 
 plot_all_kraken_burden_fam_spe <- grid.arrange(plot_kraken_fam_spe_target, plot_kraken_fam_spe_deam, ncol = 2)  
 
-path_to_save <- paste0(dir_to_save,indexlibid,"_n_",n_score,"_kraken_fam_spe_byburden.pdf")
+path_to_save <- paste0(dir_to_save,indexlibid,"_kraken_fam_spe_byburden.pdf")
 ggsave(path_to_save, plot = plot_all_kraken_burden_fam_spe, device = "pdf", width = 14, height = 7, 
        units = "in", dpi = 300)
