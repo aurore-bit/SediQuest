@@ -89,7 +89,7 @@ rule uniq_q25_l35:
         bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
         bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam.bai",
     shell: """
-    scripts_for_SediQuest/analyzeBAM -out_folder $(dirname {output.bam}) -min_len 35 -min_map_qual 25 -remove_dups {input.bam}
+    ancient_dna_cpp_tools/analyzeBAM -out_folder $(dirname {output.bam}) -min_len 35 -min_map_qual 25 -remove_dups {input.bam}
            """
  
 #If you wants to filter on a specific burden score
@@ -135,7 +135,7 @@ rule deam_filter:
     output:
             bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.deam.bam",
     shell: """
-    scripts_for_SediQuest/filterBAM -p5 0,1,2 -p3 0,-1,-2 -suffix deam -out_folder $(dirname {output.bam}) {input.bam} 
+    ancient_dna_cpp_tools/filterBAM -p5 0,1,2 -p3 0,-1,-2 -suffix deam -out_folder $(dirname {output.bam}) {input.bam} 
     """
 
 ##############################################
