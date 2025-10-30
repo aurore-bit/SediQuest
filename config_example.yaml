@@ -1,23 +1,27 @@
 ###Config file example for SediQuest###
 
-prefix: output_directory
+prefix: overview_output
 
 # path to sample table (indexlibid, probeset, seqrun, etc)
-samples_info: samples.csv
+samples_info: config/overview.esquilleu.csv
 
 #path to probeset sheet (probeset, path_to_ref, path_to_bed, path_to_control)
-probeset_info: probeset.csv
+probeset_info: config/probeset.csv
 
 #project folder
-project: output_directory
+project: overview_output
 
 #mammalian diversity score (if you don't want to use it set it to ALL)
-score_b: "ALL"
+score_b: [0, 5, 8]
 
 #n score (if you don't want to use it set it to ALL)
 score_n: "ALL"
 
-#kraken group to extract
-kraken_group: Primates
+#kraken group to extract here Primates
+kraken_group_name: "Primates"
+kraken_group: 9443
+
+#kraken database
+kraken_db: /mnt/ramdisk/refseqReleaseKraken
 
 
