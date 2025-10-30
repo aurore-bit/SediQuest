@@ -1,8 +1,7 @@
 ################################################################################
-# 
 #
-# Aurore GALTIER, 25/11/2024
-#
+# Aurore GALTIER, SediQuest pipeline 
+#For human nuclear capture in sediments
 #
 ################################################################################
 
@@ -26,8 +25,13 @@ score_b = config["score_b"]
 #define n_score
 score_n = config["score_n"]
 
+kraken_db = config["kraken_db"]
+
 #define group to extract from kraken output
 kraken_group = config["kraken_group"]
+
+#define the name of the kraken group
+kraken_group_name = config["kraken_group_name"]
 
 # Read the indexlibid information
 indexlibid_df = pd.read_csv(config["samples_info"], comment="#", sep=";")
@@ -63,7 +67,8 @@ def get_control_info(wildcards):
 #processing
 ##############################################
 
-Final_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{{score_b}}_N{score_n}_deam.bam"
+
+Final_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{{score_b}}_N{score_n}.deam.bam"
          for indexlibid, probesets in INDEXLIBID.items()
          for probeset in probesets],
          score_b=score_b)
@@ -73,30 +78,18 @@ rule process_all:
         bam_files = Final_bam
     run:
         # Print the chosen indexlibid and probeset
-        print('hey! Running target filtering, deamination, quality filtering, and duplicate removal :)')
+        print('Hello! Target filtering, deamination, quality filtering, and duplicate removal are done :)')
         pass
-
 
 
 rule uniq_q25_l35:
     input:
         bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam"
     output:
-        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}_uniqL35MQ25.bam",
-        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}_uniqL35MQ25.bai"
-    params:
-        bam="../{indexlibid}.bam",
-        unique_bam = "{indexlibid}.uniq.L35MQ25.bam",
-        unique_bai= "{indexlibid}.uniq.L35MQ25.bam.bai",
-        new_bam="{indexlibid}_uniqL35MQ25.bam",
-        new_bai="{indexlibid}_uniqL35MQ25.bai",
-        exhaust = "{indexlibid}.bam.exhaustion"
-        #unique_sum="summary_stats_L35MQ25.txt"
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
+        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam.bai",
     shell: """
-    cd $(dirname {output.bam})
-    scripts_for_SediQuest/analyzeBAM.pl -nof -minlength 35 -qual 25 {params.bam} > {params.exhaust}
-    mv {params.unique_bam} {params.new_bam}
-    mv {params.unique_bai} {params.new_bai}
+    scripts_for_SediQuest/analyzeBAM -out_folder $(dirname {output.bam}) -min_len 35 -min_map_qual 25 -remove_dups {input.bam}
            """
  
 #If you wants to filter on a specific burden score
@@ -115,14 +108,21 @@ rule filter_control_sites_b_score:
         Rscript scripts_for_SediQuest/filter_SNPs.R {params.b_score} {input.control_sites} {input.control} {output.sites_filtered} 
     """
 
+#To filter sites accordingly to you b score configuration choice
+def get_sites_filtered(wildcards):
+    if wildcards.score_b == "ALL":
+        return get_control(wildcards) 
+    else:
+        return f"{wildcards.project}/mappedbams/{wildcards.indexlibid}/{wildcards.probeset}/rmdupL35MQ25/target/Mam_div_score_{wildcards.score_b}/N_score_{wildcards.score_n}/sites_MD_{wildcards.score_b}_N_{wildcards.score_n}.filtered.txt"
+
+
 rule filter_bam_by_control_sites:
     input:
-      #  sites_filtered="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/sites_MD_{score_b}_N_{score_n}.filtered.txt",
-        sites_filtered=get_control,
-        bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}_uniqL35MQ25.bam",
+        sites_filtered=get_sites_filtered,
+        bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
     output:
-        sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}.bam",
-        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}.bai",
+        sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.bam",
+        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.bai",
     threads: 1
     #conda: "envs/processing.yaml"
     shell: """
@@ -130,24 +130,13 @@ rule filter_bam_by_control_sites:
         samtools index {output.sites_bam} {output.bai}
     """
 
-
 rule deam_filter:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}.bam"
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.bam"
     output:
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}_deam.bam",
-           # bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}_deam.bai",
-            stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}_deam.deam53x3.stats"
-    #conda: "envs/processing.yaml"
-    params:
-        unique_bam="{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}.deam53x3.bam",
-        new_bam="{indexlibid}_uniqL35MQ25_MD{b_score}_N{score_n}_deam.bam"
+            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.deam.bam",
     shell: """
-    scripts_for_SediQuest/filterBAM.pl  -p5 0,1,2 -p3 0,-1,-2 -suffix deam53x3 {input.bam} &> {output.stats}
-    mv {params.unique_bam}  {params.new_bam}
-    mv {params.new_bam} $(dirname {output.bam})
+    scripts_for_SediQuest/filterBAM -p5 0,1,2 -p3 0,-1,-2 -suffix deam -out_folder $(dirname {output.bam}) {input.bam} 
     """
-
-
 
 ##############################################
 #kraken step 1 create a fasta file
@@ -207,7 +196,7 @@ rule bam_to_fasta_2:
 
 rule bam_to_fasta_3:
     input:
-        bam_mapped_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam",
+        bam_mapped_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
     output:
         fa_bam_mapped_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.fa.gz",
     threads: 1
@@ -217,7 +206,7 @@ rule bam_to_fasta_3:
 
 rule bam_to_fasta_4:
     input:
-        bam_mapped="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}_uniqL35MQ25.bam",
+        bam_mapped="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
     output:
         fa_bam_mapped="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/kraken/{indexlibid}.fa.gz",
     threads: 1
@@ -228,7 +217,7 @@ rule bam_to_fasta_4:
 
 rule bam_to_fasta_5:
     input:
-        bam_mapped_target_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.bam",
+        bam_mapped_target_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam",
     output:
         fa_bam_mapped_target_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.fa.gz",
     threads: 1
@@ -289,37 +278,33 @@ Kraken_byread_bam_mapped_target_deam = expand([f"{project}/mappedbams/{indexlibi
          for probeset in probesets],
          score_b=score_b)
 
-Kraken_split_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{{score_b}}_N{score_n}_K{kraken_group}.bam"
+Kraken_split_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/split_kraken/{indexlibid}.uniq.L35MQ25_MD{{score_b}}_N{score_n}_K{kraken_group_name}.bam"
          for indexlibid, probesets in INDEXLIBID.items()
          for probeset in probesets],
          score_b=score_b)
 
-Kraken_split_deam_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{{score_b}}_N{score_n}_deam_K{kraken_group}.bam"
+Kraken_split_deam_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{{score_b}}_N{score_n}.deam_K{kraken_group_name}.bam"
          for indexlibid, probesets in INDEXLIBID.items()
          for probeset in probesets],
          score_b=score_b)
  
-Kraken_split_capture_eff = [f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/split_kraken/{indexlibid}_uniqL35MQ25_K{kraken_group}.bam"
-         for indexlibid, probesets in INDEXLIBID.items()
-         for probeset in probesets]
 
 rule kraken_step_2:
     input: Kraken_split, Kraken_byread_split, Kraken_bam,Kraken_byread_bam, Kraken_bam_mapped,Kraken_byread_bam_mapped, Kraken_bam_mapped_target, Kraken_bam_mapped_target_deam, Kraken_byread_bam_mapped_target_deam, Kraken_byread_bam_mapped_target, Kraken_split, Kraken_split_deam_bam,Kraken_split_bam
 
 
 rule generic_kraken:
-    input: fa="{indexlibid}.fa.gz"
-    output: kraken="{indexlibid}.kraken"
+    input: 
+        fa="{indexlibid}.fa.gz"
+    output: 
+        kraken="{indexlibid}.kraken"
+    log:
+        "{indexlibid}.kraken.log"
     threads: 1
     conda: "envs/kraken.yaml"
     shell: """
-
-     nproc=$(time kraken --threads {threads} --db kraken_database \
-     --output {output.kraken} {input.fa} 2>&1 | grep 'processed' | cut -f1 -d' ')
-     echo "count seqs {input.fa}"
-     nseq=$(gunzip -c {input.fa} | grep -c -e '>' -e '@') || echo "no seqs found $nseq"
-
-     if [ ! $nseq -eq $nproc ] ; then echo KRAKEN RUN FAILED; stop; fi
+    kraken --threads {threads} --db {config[kraken_db]} \
+    --output {output.kraken} {input.fa} 2>> {log}
     """
 
 rule generic_kraken_summary:
@@ -328,12 +313,7 @@ rule generic_kraken_summary:
     threads: 1
    # conda: "envs/kraken.yaml"
     shell: """
-
-
-    echo 'making report..'
-    ## translate file has info on each read (but not in an easy-to-digest way)
-    ## phylo file has a summary for each level in the taxonomy
-    python3 scripts_for_SediQuest/kraken_report.py --db kraken_database {input.kraken} > {output.phylo}
+    python3 scripts_for_SediQuest/kraken_report.py --db {config[kraken_db]} {input.kraken} > {output.phylo}
     """
 
 rule generic_kraken_spc_summary:
@@ -342,45 +322,8 @@ rule generic_kraken_spc_summary:
     output: spc_summary="{indexlibid}.kraken_spc"
   #  conda: "envs/kraken.yaml"
     shell: """
-    
-    v=$((grep '  Afrotheria$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
-    echo "$v" {input.spc_krak}
-    
-    w=$((grep '  Primates$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
-    echo "$v: $w" {input.spc_krak}
-    
-    x=$((grep '  Laurasiatheria$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
-    echo "$v: $w: $x" {input.spc_krak}
-    
-    y=$((grep '  Glires$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
-    echo "$v: $w: $x: $y" {input.spc_krak}
-
-    m=$((grep '  Mammalia$' {input.spc_krak} ||echo 0 0) | awk '{{print $2-'$v'-'$w'-'$x'-'$y'}}')
-    echo " $v: $w: $x: $y: $m : " {input.spc_krak}
-
-    b=$((grep '  Bacteria$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
-    echo "$v: $w: $x: $y : $m : $b" {input.spc_krak}
-
-    s=$((grep '  Sauropsida$' {input.spc_krak} || echo 0 0) | awk '{{print $2}}')
-    echo "$v: $w: $x: $y : $m : $b : $s :" {input.spc_krak}
-
-    r=$(grep '	root$' {input.spc_krak} | awk '{{print $2-'$m'-'$b'-'$s'-'$v'-'$w'-'$x'-'$y'}}')
-    echo "$v: $w: $x: $y : $m : $b : $s : $r :" {input.spc_krak}
-
-    u=$(grep '	unclassified$' {input.spc_krak} | awk '{{print $2}}')
-    echo "$v: $w: $x: $y : $m : $b : $s : $r : $u : " {input.spc_krak}
-
-    echo "Mammalia $m" >> {output.spc_summary}
-    echo "Bacteria $b" >> {output.spc_summary}
-    echo "Sauropsida $s" >> {output.spc_summary}
-    echo "root $r" >> {output.spc_summary}
-    echo "unclassified $u" >> {output.spc_summary}
-    echo "Afrotheria $v" >> {output.spc_summary}
-    echo "Primates $w" >> {output.spc_summary}
-    echo "Laurasiatheria $x" >> {output.spc_summary}
-    echo "Glires $y" >> {output.spc_summary}
-
-"""
+    scripts_for_SediQuest/spc_kraken_summary.sh {input} {output}
+    """
 
 
 rule generic_kraken_translate:
@@ -388,11 +331,7 @@ rule generic_kraken_translate:
     output: translate="{indexlibid}.translate"
     threads: 1
     shell: """
-
-    echo 'making report..'
-    ## translate file has info on each read (but not in an easy-to-digest way)
-    ## phylo file has a summary for each level in the taxonomy
-    python3 scripts_for_SediQuest/kraken_report.py --db kraken_database {input.kraken} --translate {output.translate} > /dev/null
+    python3 scripts_for_SediQuest/kraken_report.py --db {config[kraken_db]} {input.kraken} --translate {output.translate} > /dev/null
 
     """
 
@@ -413,36 +352,37 @@ rule generic_kraken_byread:
 ##############################################
 
 rule generic_kraken_extract_after_deam:
-    input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.bam",
+    input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam",
            kraken = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.kraken",
            translate = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.translate"
-    output: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_K{kraken_group}.bam"
-    wildcard_constraints:
-       # kcat = "|\.swp_third|\.swp_original|\.swp_masked",
-        kraken_group = "Primates"
+    output: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_K{kraken_group_name}.bam"
     threads: 1
     shell: """
-   
-
-    echo 'finding clade'
-    clade=$(awk '$2 == "'{wildcards.kraken_group}'" {{print $1}}' /mnt/expressions/benjamin_vernot/soil_capture_2017/process_sequencing/data/clade_taxa_map_alphanum.txt)
-    echo clade $clade
     ofile=$(dirname {output.bam})/$(basename {output.bam} .bam)
-    echo ofile $ofile
-    
-    ## save the header first (doesn't kraken_report just overwrite this?)
-    # samtools view -H -b {input.bam} > {output.bam}
 
-    echo 'splitting bam..'
-    ## translate file has info on each read (but not in an easy-to-digest way)
-    ## have to write to the correct file - this doesn't take an ofile, which is maddening...
-    python3 kraken_database/kraken_report.py --db kraken_database {input.kraken} --extractFile {input.bam} \
-       --clades $clade --extract-out-base $ofile  > /dev/null
+    python3 scripts_for_SediQuest/kraken_report.py --db {config[kraken_db]} {input.kraken} --extractFile {input.bam} \
+       --clades {config[kraken_group]} --extract-out-base $ofile   > /dev/null
 
     """
 
 
+##############################################
+#split kraken before deam
+##############################################
 
+rule generic_kraken_extract_before_deam:
+    input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
+           kraken = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.kraken",
+           translate = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.translate"
+    output: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_K{kraken_group_name}.bam"
+    threads: 1
+    shell: """
+    ofile=$(dirname {output.bam})/$(basename {output.bam} .bam)
+
+    python3 scripts_for_SediQuest/kraken_report.py --db {config[kraken_db]} {input.kraken} --extractFile {input.bam} \
+       --clades {config[kraken_group]} --extract-out-base $ofile  > /dev/null
+
+    """
 
 
 
@@ -451,303 +391,126 @@ rule generic_kraken_extract_after_deam:
 #summary
 ##############################################
 
-summary_damage= expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/deam_stats/{indexlibid}_uniqL35MQ25_MD{{score_b}}_N{score_n}.summary_damage.txt"
-        for indexlibid, probesets in INDEXLIBID.items()
-        for probeset in probesets],
-        score_b=score_b)
-
 summary_table= expand([f"{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{{score_b}}/N_score_{score_n}/{indexlibid}.pipeline_summary.txt"
         for indexlibid, probesets in INDEXLIBID.items()
         for probeset in probesets],
         score_b=score_b)
 
-faunal_contam = expand([f"{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{{score_b}}/N_score_{score_n}/{indexlibid}_SNPs_number_cov_combined.pdf"
+faunal_contam = expand([f"{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{{score_b}}/N_score_{score_n}/{indexlibid}_cov_MD.pdf"
         for indexlibid, probesets in INDEXLIBID.items()
         for probeset in probesets],
         score_b=score_b)
 
+kraken_plot = expand([f"{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{{score_b}}/N_score_{score_n}/{indexlibid}_kraken_order_byburden.pdf"
+        for indexlibid, probesets in INDEXLIBID.items()
+        for probeset in probesets],
+        score_b=score_b)
 
 rule summaries:
     input:
-        summary_damage=summary_damage,
         summary_table=summary_table,
-        cov_plot=faunal_contam
+        cov_plot=faunal_contam,
+        kraken_plot=kraken_plot
     run:
         print('hey! Creating summaries')
         pass
 
+
 #create coverage file for on target reads
 rule cov_bed_files:
-    input: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam"
+    input: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam"
     output:
-            cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.cov"
+            cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.cov",
+            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.count"
     shell:"""
             samtools mpileup -B {input} > {output.cov}
+            awk '$4 != 0' {output.cov} | wc -l > {output.count}
             """
-""
 
 
-#give average coverage deaminated not primates filtered 
-rule cov_average_deam_all:
-    input: 
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.bam",
-           # bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_clean.bam",
-            bed = "/mnt/archgen/Reference_Genomes/Human/hs37d5/SNPCapBEDs/1240K.pos.list_hs37d5.0based.bed",
-            ref=lambda wildcards: get_ref(wildcards).replace("bwa-0.4.9", "whole_genome.fa")
+#get coverage also for deaminated reads
+rule cov_bed_files_deam:
+    input: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam"
     output:
-            depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.depth",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.count"
+            cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.cov",
+            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.count"
     shell:"""
-            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
-            awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
+            samtools mpileup -B {input} > {output.cov}
+            awk '$4 != 0' {output.cov} | wc -l > {output.count}
             """
-
-#give average coverage deaminated primates filtered 
-rule cov_average_deam_primates:
-    input: 
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.bam",
-            bed = "/mnt/archgen/Reference_Genomes/Human/hs37d5/SNPCapBEDs/1240K.pos.list_hs37d5.0based.bed",
-            ref=lambda wildcards: get_ref(wildcards).replace("bwa-0.4.9", "whole_genome.fa")
-
-    output:
-            depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.depth",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.count"
-    shell:"""
-            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
-            awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
-            """
-
-
-#give average coverage all primates filtered 
-rule cov_average_primates:
-    input: 
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.bam",
-            bed = "/mnt/archgen/Reference_Genomes/Human/hs37d5/SNPCapBEDs/1240K.pos.list_hs37d5.0based.bed",
-            ref=lambda wildcards: get_ref(wildcards).replace("bwa-0.4.9", "whole_genome.fa")
-
-    output:
-            depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.depth",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.count"
-    shell:"""
-            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
-            awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
-            """
-
-
-
-#give count coverage all not primates filtered 
-rule cov_count_all:
-    input: 
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam",
-            bed="/mnt/archgen/Reference_Genomes/Human/hs37d5/SNPCapBEDs/1240K.pos.list_hs37d5.0based.bed",
-            ref=lambda wildcards: get_ref(wildcards).replace("bwa-0.4.9", "whole_genome.fa")
-
-    output:
-            depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.depth",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.count"
-    shell:"""
-            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
-            awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
-            """
-
-
-#give count coverage for HO panel primates deaminated
-rule cov_count_HO_primates_deam:
-    input: 
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.bam",
-            bed="/mnt/expressions/Aurore/merlin_malta_project/v62.0_HO_public.snp.txt.bed",
-            ref=lambda wildcards: get_ref(wildcards).replace("bwa-0.4.9", "whole_genome.fa")
-
-    output:
-            depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.depth_ho",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.count_ho"
-    shell:"""
-            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
-            awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
-            """
-
-#give count coverage for HO panel deaminated
-rule cov_count_HO_deam:
-    input: 
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.bam",
-            bed="/mnt/expressions/Aurore/merlin_malta_project/v62.0_HO_public.snp.txt.bed",
-            ref=lambda wildcards: get_ref(wildcards).replace("bwa-0.4.9", "whole_genome.fa")
-
-    output:
-            depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.depth_ho",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.count_ho"
-    shell:"""
-            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
-            awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
-            """
-
-
-#give count coverage for HO panel primates
-rule cov_count_HO_primates:
-    input: 
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.bam",
-            bed="/mnt/expressions/Aurore/merlin_malta_project/v62.0_HO_public.snp.txt.bed",
-            ref=lambda wildcards: get_ref(wildcards).replace("bwa-0.4.9", "whole_genome.fa")
-    output:
-            depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.depth_ho",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.count_ho"
-    shell:"""
-            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
-            awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
-            """
-
-#give count coverage for HO panel 
-rule cov_count_HO:
-    input: 
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam",
-            bed="/mnt/expressions/Aurore/merlin_malta_project/v62.0_HO_public.snp.txt.bed",
-            ref=lambda wildcards: get_ref(wildcards).replace("bwa-0.4.9", "whole_genome.fa")
-
-    output:
-            depth="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.depth_ho",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.count_ho"
-    shell:"""
-            samtools mpileup -R -B -q25 -Q30 -l {input.bed} -f {input.ref} {input.bam} > {output.depth}
-            awk '$4 ==1 {{count++}} END {{print count}}' {output.depth} > {output.count}
-            """
-
 
 
 #give an estimate of the contamination
 rule contamination_estimaTe:
     input: 
-        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam"
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam"
     output:
-        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.authentict"
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.authentict"
     shell: """
             samtools view {input.bam} | AuthentiCT deam2cont -o {output.bam} -s 10000 -
             """
 
-#just count number of reads
+
+
+#new deam summaries files
+rule deam_stats_table:
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
+    output: summary_new="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam_stats/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.summary_damage.txt"
+    shell: """
+            scripts_for_SediQuest/quick_substitutions.pl {input.bam} > {output.summary_new}
+            """
+
+
+#create the summary table
 rule pipeline_summary:
     input:
+        split_bam="{project}/split/{indexlibid}/{probeset}/{indexlibid}.bam",
         map_bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
-        target_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam",
-        rmdup_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}_uniqL35MQ25.bam",
-        deam_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.bam",
-        split_kraken="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.bam",
-        exhaustion="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.bam.exhaustion",
-        deam_stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam_stats/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.summary_damage.txt",
-        average_all_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.count",
-        average_primates_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.count",
-        average_all="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.count",
-        average_primates="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.count",
-        average_all_deam_ho="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.count_ho",
-        average_primates_deam_ho="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam_KPrimates.count_ho",
-        average_primates_ho="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_KPrimates.count_ho",
-        average_all_ho="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.count_ho",
-        contam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.authentict"
+        target_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
+        rmdup_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
+        deam_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam",
+        split_kraken="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_KPrimates.bam",
+        split_kraken_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_KPrimates.bam",
+        summary_unique="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/summary_stats.uniq.L35MQ25.txt",
+        deam_stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam_stats/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.summary_damage.txt",
+        count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.count",
+        count_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.count",
+        contam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.authentict"
     output:
         summary_annotated="{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.pipeline_summary.txt",
     shell:
         """
-        splitbam="{wildcards.project}/split/{wildcards.indexlibid}/{wildcards.probeset}/{wildcards.indexlibid}.bam"
-        
-        if [ -e $splitbam ] ; then
-          sc=$(samtools view -c $splitbam)
-        else
-          sc="NA"
-        fi
-
-        # Get read counts for each input BAM file
-        map_bam_reads=$(/home/bioinf/usr/bin/samtools view -c {input.map_bam})
-        rmdup_bam_reads=$(/home/bioinf/usr/bin/samtools view -c {input.rmdup_bam})
-        target_bam_reads=$(/home/bioinf/usr/bin/samtools view -c {input.target_bam})
-        deam_bam_reads=$(/home/bioinf/usr/bin/samtools view -c {input.deam_bam})
-        primates=$(/home/bioinf/usr/bin/samtools view -c {input.split_kraken})
-
-        # Get deam stats (5'CT_95CI, 3'CT_95CI, cond5'CT_95CI, cond3'CT_95CI) from deam_stats file
-        deam_stats_file="{input.deam_stats}"
-        deam_5CT_95CI=$(awk 'NR==2 {{print $4}}' $deam_stats_file)
-        deam_3CT_95CI=$(awk 'NR==2 {{print $5}}' $deam_stats_file)
-        deam_cond5CT_95CI=$(awk 'NR==2 {{print $10}}' $deam_stats_file)
-        deam_cond3CT_95CI=$(awk 'NR==2 {{print $11}}' $deam_stats_file)
-
-        # Get %unique and %exhausted from exhaustion file
-        exhaustion_file="{input.exhaustion}"
-        unique_percentage=$(awk 'NR==2 {{print $8}}' $exhaustion_file)
-        exhausted_percentage=$(awk 'NR==2 {{print $9}}' $exhaustion_file)
-
-        #get contamination estimate
-       contamination_file="{input.contam}"
-       contamination=$(awk 'NR==8 {{print $2}}' $contamination_file)
-        err_estimate=$(awk 'NR==8 {{print $3}}' $contamination_file)
-
-        tmp={output.summary_annotated}
-
-        # Write header to the summary file
-        echo IndexLibID N_score MD_score probeset split mapped rmdup target deam primates 5'CT_95CI 3'CT_95CI cond5'CT_95CI cond3'CT_95CI %unique %exhausted Count_Krall Count_KrPrimates Count_KrPrimates_deam Count_KrALL_deam Count_Krall_ho Count_KrPrimates_ho Count_KrPrimates_deam_ho Count_KrALL_deam_ho Contamination Contamination_err_estimate | tr ' ' '\t' > $tmp
-
-        # Append the values for each field to the summary file
-        echo {wildcards.indexlibid} {wildcards.score_n} {wildcards.score_b} {wildcards.probeset} \
-        $sc \
-        $map_bam_reads \
-        $rmdup_bam_reads \
-        $target_bam_reads \
-        $deam_bam_reads \
-        $primates \
-        "$deam_5CT_95CI" \
-        "$deam_3CT_95CI" \
-        "$deam_cond5CT_95CI" \
-        "$deam_cond3CT_95CI" \
-        "$unique_percentage" \
-        "$exhausted_percentage" \
-        $(cat {input.average_all}) \
-        $(cat {input.average_primates}) \
-        $(cat {input.average_primates_deam}) \
-        $(cat {input.average_all_deam}) \
-        $(cat {input.average_all_ho}) \
-        $(cat {input.average_primates_ho}) \
-        $(cat {input.average_primates_deam_ho}) \
-        $(cat {input.average_all_deam_ho}) \
-        "$contamination" \
-        "$err_estimate" \
-        | tr ' ' '\t' >> $tmp
+        bash scripts_for_SediQuest/summary_table.sh {input.map_bam} {input.rmdup_bam} {input.target_bam} {input.deam_bam} {input.split_kraken} {input.split_kraken_deam} {input.deam_stats} {input.summary_unique} {input.contam} {input.count} {input.count_deam} {output.summary_annotated} {input.split_bam}  {wildcards.indexlibid} {wildcards.score_n} {wildcards.score_b} {wildcards.probeset} 
         """
 
 
 #create a file indicating every info for each read
 rule bam_read_summary_target:
-     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam",
+     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
             control=get_control_info
-     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.read_summary.txt.gz"
+     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.read_summary.txt.gz"
      shell: """
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
-     	    time scripts_for_SediQuest/bam_basic_stats_pysam2.py \
+     	    time python scripts_for_SediQuest/bam_basic_stats_pysam2.py \
 	    	 --control {input.control} \
 		    --bam {input.bam} \
 		    --tags lib --tags-fill {wildcards.indexlibid} \
-		    --control-header /mnt/expressions/benjamin_vernot/soil_capture_2017/site_categories_for_capture/soil_probe_designs/probes_CONTROL_HEADER.txt \
+		    --control-header scripts_for_SediQuest/probes_CONTROL_HEADER.txt \
 		    | gzip -c > {output.summary}
             """
 
 rule bam_read_summary_deam:
-     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.bam",
+     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam",
             control=get_control_info
-     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}_deam.read_summary.txt.gz"
+     output: summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.read_summary.txt.gz"
      shell: """
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
-     	    time scripts_for_SediQuest/bam_basic_stats_pysam2.py \
+     	    time python scripts_for_SediQuest/bam_basic_stats_pysam2.py \
 	    	 --control {input.control} \
 		    --bam {input.bam} \
 		    --tags lib --tags-fill {wildcards.indexlibid} \
-		    --control-header /mnt/expressions/benjamin_vernot/soil_capture_2017/site_categories_for_capture/soil_probe_designs/probes_CONTROL_HEADER.txt \
+		    --control-header scripts_for_SediQuest/probes_CONTROL_HEADER.txt  \
 		    | gzip -c > {output.summary}
-            """
-
-
-#new deam summaries files
-rule deam_stats_table:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam",
-    output: summary_new="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam_stats/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.summary_damage.txt"
-   # params:  summary_new="{indexlibid}_uniqL35MQ25_MD{score_b}_N{n_score}.summary_damage.txt"
-    shell: """
-            scripts_for_SediQuest/quick_substitutions.pl {input.bam} > {output.summary_new}
             """
 
 
@@ -755,15 +518,15 @@ rule deam_stats_table:
 rule plot_kraken_by_burden:
     input:
         burden=get_bed,
-        kraken_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.byread",
-        kraken_info_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/{indexlibid}_n_{n_score}.read_summary.txt.gz",
-        kraken_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.byread",
-        kraken_info_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/{score_b}_filter/deam/{indexlibid}_n_{n_score}.read_summary.txt.gz",
+        kraken_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.byread",
+        kraken_info_target="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.read_summary.txt.gz",
+        kraken_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.byread",
+        kraken_info_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.read_summary.txt.gz",
     output:
-        order="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_kraken_order_byburden.pdf",
-        fam_spe="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/{indexlibid}_n_{n_score}_kraken_fam_spe_byburden.pdf"
+        order="{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_kraken_order_byburden.pdf",
+        fam_spe="{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_kraken_fam_spe_byburden.pdf"
     params:
-        output_dir="{project}_summary/{indexlibid}/{probeset}/{score_b}_filter/",
+        output_dir="{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/",
         n_score=score_n
     run:
         shell(f"""
@@ -772,15 +535,13 @@ rule plot_kraken_by_burden:
 
 
 
-
-
 #create plot combining cov and snps
 rule plot_cov_snps:
     input:
-        cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_uniqL35MQ25_MD{score_b}_N{score_n}.bam.cov",
+        cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.cov",
         burden=get_bed,
     output:
-        "{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_SNPs_number_cov_combined.pdf"
+        "{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_cov_MD.pdf"
     params:
         output_dir="{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/"
     run:
