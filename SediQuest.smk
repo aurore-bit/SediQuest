@@ -62,6 +62,16 @@ def get_control_info(wildcards):
     return probeset_df.loc[probeset_df['probeset'] == wildcards.probeset, "path_to_control_info"]
 
 
+##############################################
+#A rule for everything
+##############################################
+
+rule run_pipeline:
+    input:
+        rule process_all
+        rule kraken_step_1
+        rule kraken_step_2
+        rule summaries
 
 ##############################################
 #processing
@@ -73,9 +83,16 @@ Final_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/
          for probeset in probesets],
          score_b=score_b)
 
+bam_filterON = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/{indexlibid}.uniq.L35MQ25_MD{{score_b}}_N{score_n}_K{kraken_group_name}_filterON.bam"
+         for indexlibid, probesets in INDEXLIBID.items()
+         for probeset in probesets],
+        score_b=score_b)
+
+
 rule process_all:
     input:
-        bam_files = Final_bam
+        bam_files = Final_bam,
+        bam_filterON = lambda wildcards: bam_filterON if config.get("filter") == "HIGH" else []
     run:
         # Print the chosen indexlibid and probeset
         print('Hello! Target filtering, deamination, quality filtering, and duplicate removal are done :)')
@@ -121,8 +138,8 @@ rule filter_bam_by_control_sites:
         sites_filtered=get_sites_filtered,
         bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
     output:
-        sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.bam",
-        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.bai",
+        sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
+        bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bai",
     threads: 1
     #conda: "envs/processing.yaml"
     shell: """
@@ -131,24 +148,48 @@ rule filter_bam_by_control_sites:
     """
 
 rule deam_filter:
-    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.bam"
+    input: bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam"
     output:
-            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{b_score}_N{score_n}.deam.bam",
+            bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam",
     shell: """
     ancient_dna_cpp_tools/filterBAM -p5 0,1,2 -p3 0,-1,-2 -suffix deam -out_folder $(dirname {output.bam}) {input.bam} 
     """
 
+
+
+rule read_id_filter:
+    input:
+        burden_filter = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.read_summary.txt.gz",
+        kraken_info = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.byread",
+        burden_all = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_ALL/N_score_ALL/{indexlibid}.uniq.L35MQ25_MDALL_NALL.read_summary.txt.gz",
+        burden_filter_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.read_summary.txt.gz",
+        kraken_info_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.byread",
+        burden_all_deam =  "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_ALL/N_score_ALL/deam/{indexlibid}.uniq.L35MQ25_MDALL_NALL.deam.read_summary.txt.gz"
+    output: 
+        read_to_filter = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/reads_to_filter_MD{score_b}_N{score_n}.txt",
+        read_to_filter_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/deam/reads_to_filter_MD{score_b}_N{score_n}.txt"
+    params:
+        score_b=score_b
+    shell: """
+        Rscript scripts_for_SediQuest/high_filter.R {params.score_b} {input.burden_filter} {input.kraken_info} {input.burden_all} {input.burden_filter_deam} {input.kraken_info_deam} {input.burden_all_deam} {output.read_to_filter} {output.read_to_filter_deam} 
+        """
+
+rule extract_reads:
+    input:
+        read_to_filter = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/reads_to_filter_MD{score_b}_N{score_n}.txt",
+        bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/{indexlibid}.uniq.L35MQ25.bam",
+        read_to_filter_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/deam/reads_to_filter_MD{score_b}_N{score_n}.txt",
+    output:
+        bam_filter = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_K{kraken_group_name}_filterON.bam",
+        bam_filter_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_K{kraken_group_name}.deam_filterON.bam"
+    shell: """
+        samtools view -N {input.read_to_filter} -b {input.bam} -o {output.bam_filter}
+        samtools view -N {input.read_to_filter_deam} -b {input.bam} -o {output.bam_filter_deam}
+        """
+
 ##############################################
 #kraken step 1 create a fasta file
 ##############################################
-
-fa_bam = [f"{project}/mappedbams/{indexlibid}/{probeset}/kraken/{indexlibid}.fa.gz"
-       for indexlibid, probesets in INDEXLIBID.items()
-       for probeset in probesets]
-
-fa_split = [f"{project}/split/{indexlibid}/{probeset}/kraken/{indexlibid}.fa.gz"
-         for indexlibid, probesets in INDEXLIBID.items()
-         for probeset in probesets]
 
 fa_bam_mapped_target = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/kraken/{indexlibid}.fa.gz"
                      for indexlibid, probesets in INDEXLIBID.items()
@@ -161,15 +202,11 @@ fa_bam_mapped_target_deam = expand([f"{project}/mappedbams/{indexlibid}/{probese
                          for probeset in probesets],
                          score_b=score_b)
 
-fa_bam_mapped = [f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/kraken/{indexlibid}.fa.gz"
-              for indexlibid, probesets in INDEXLIBID.items()
-              for probeset in probesets]
-
 wildcard_constraints:
     score_n="[^/]+"
 
 rule kraken_step_1:
-    input: fa_bam, fa_split, fa_bam_mapped_target, fa_bam_mapped_target_deam, fa_bam_mapped
+    input: fa_bam_mapped_target, fa_bam_mapped_target_deam
 
 rule bam_to_fasta_1:
     input:
@@ -231,30 +268,6 @@ rule bam_to_fasta_5:
 ##############################################
 #kraken step 2 run kraken
 ##############################################
-Kraken_split = [f"{project}/split/{indexlibid}/{probeset}/kraken/{indexlibid}.kraken_spc"
-         for indexlibid, probesets in INDEXLIBID.items()
-         for probeset in probesets]
-         
-
-Kraken_byread_split= [f"{project}/split/{indexlibid}/{probeset}/kraken/{indexlibid}.byread"
-         for indexlibid, probesets in INDEXLIBID.items()
-         for probeset in probesets]
-
-Kraken_bam = [f"{project}/mappedbams/{indexlibid}/{probeset}/kraken/{indexlibid}.kraken_spc"
-         for indexlibid, probesets in INDEXLIBID.items()
-         for probeset in probesets]
-
-Kraken_byread_bam = [f"{project}/mappedbams/{indexlibid}/{probeset}/kraken/{indexlibid}.byread"
-         for indexlibid, probesets in INDEXLIBID.items()
-         for probeset in probesets]
-
-Kraken_bam_mapped= [f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/kraken/{indexlibid}.kraken_spc"
-         for indexlibid, probesets in INDEXLIBID.items()
-         for probeset in probesets]
-
-Kraken_byread_bam_mapped= [f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/kraken/{indexlibid}.byread"
-         for indexlibid, probesets in INDEXLIBID.items()
-         for probeset in probesets]
 
 
 Kraken_bam_mapped_target = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{{score_b}}/N_score_{score_n}/kraken/{indexlibid}.kraken_spc"
@@ -290,7 +303,7 @@ Kraken_split_deam_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/r
  
 
 rule kraken_step_2:
-    input: Kraken_split, Kraken_byread_split, Kraken_bam,Kraken_byread_bam, Kraken_bam_mapped,Kraken_byread_bam_mapped, Kraken_bam_mapped_target, Kraken_bam_mapped_target_deam, Kraken_byread_bam_mapped_target_deam, Kraken_byread_bam_mapped_target, Kraken_split, Kraken_split_deam_bam,Kraken_split_bam
+    input: Kraken_bam_mapped_target, Kraken_bam_mapped_target_deam, Kraken_byread_bam_mapped_target_deam, Kraken_byread_bam_mapped_target, Kraken_split_deam_bam,Kraken_split_bam
 
 
 rule generic_kraken:
