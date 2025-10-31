@@ -1,3 +1,6 @@
+
+![Pipeline diagram](SediQuest.png)
+
 # SediQuest
 
 This pipeline is a friendly-user implementation of the Vernot et al. (2021) workflow. It aims to extract human reads from capture data to perform further analysis. The set of sites used to capture the DNA is called a probeset here.
