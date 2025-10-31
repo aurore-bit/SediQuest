@@ -1,5 +1,5 @@
 
-![Pipeline diagram](SediQuest.png)
+![Pipeline diagram](SediQuest_v2.png)
 
 # SediQuest
 
