@@ -12,7 +12,7 @@ probeset_info: config/probeset.csv
 project: overview_output
 
 #mammalian diversity score (if you don't want to use it set it to ALL)
-score_b: [0, 5, 8]
+score_b: [5]
 
 #n score (if you don't want to use it set it to ALL)
 score_n: "ALL"
@@ -23,5 +23,8 @@ kraken_group: 9443
 
 #kraken database
 kraken_db: /mnt/ramdisk/refseqReleaseKraken
+
+#If you want to save as much data as you can set this to HIGH this is only useful after looking at your summary and putting a mammalian diversity score value on 
+filter: "HIGH"
 
 
