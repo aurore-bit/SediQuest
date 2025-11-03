@@ -109,6 +109,8 @@ Plots and Tables are available for you to look at, here is a bried description o
 
 This plot is an example, generated from a deer bone and a human bone for you to investigate if your sediment sample look like it has faunal contamination in it or not.
 
+![Pipeline diagram](coverage_plot.png)
+
 
 - Kraken coverage plot
 
