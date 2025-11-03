@@ -115,3 +115,7 @@ This plot is an example, generated from a deer bone and a human bone for you to 
 - Kraken coverage plot
 
 This plot is an example from a sediment sample
+
+
+![Pipeline diagram](Lib.S.9756_kraken_fam_spe_byburden.pdf)
+
