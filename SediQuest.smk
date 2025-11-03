@@ -59,6 +59,10 @@ def get_control(wildcards):
     return probeset_df.loc[probeset_df['probeset'] == wildcards.probeset, "path_to_control"]
 
 
+def get_control_info(wildcards):
+    return probeset_df.loc[probeset_df['probeset'] == wildcards.probeset, "path_to_control_info"]
+
+
 ##############################################
 #A rule for everything
 ##############################################
@@ -456,17 +460,15 @@ rule pipeline_summary:
 #create a file indicating every info for each read
 rule bam_read_summary_target:
      input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
-            control=get_control
+            control=get_control_info
      output: 
         summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.read_summary.txt.gz",
-        tmp_bed = temp("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.tmp.bed")
+      
      shell: """
-            awk '{{print $2, $1, $3}}' OFS='\t' {input.control} > {output.tmp_bed}
-
-
+           
             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
      	    time python scripts_for_SediQuest/bam_basic_stats_pysam2.py \
-	    	 --control {output.tmp_bed} \
+	    	 --control {input.control} \
 		    --bam {input.bam} \
 		    --tags lib --tags-fill {wildcards.indexlibid} \
 		    --control-header scripts_for_SediQuest/probes_CONTROL_HEADER.txt \
@@ -475,16 +477,13 @@ rule bam_read_summary_target:
 
 rule bam_read_summary_deam:
      input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam",
-            control=get_control
+            control=get_control_info
      output: 
         summary ="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.read_summary.txt.gz",
-        tmp_bed = temp("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.tmp.bed")
      shell: """
-            awk '{{print $2, $1, $3}}' OFS='\t' {input.control} > {output.tmp_bed}
-
-            ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
+             ## bam_basic_stats_pysam2.py is much faster - it goes through the bam read by read instead of looking for every position in the control file. should produce identical output to bam_basic_stats_pysam.py
      	    time python scripts_for_SediQuest/bam_basic_stats_pysam2.py \
-	    	 --control {output.tmp_bed} \
+	    	  --control {input.control} \
 		    --bam {input.bam} \
 		    --tags lib --tags-fill {wildcards.indexlibid} \
 		    --control-header scripts_for_SediQuest/probes_CONTROL_HEADER.txt  \
