@@ -36,11 +36,14 @@ score_n: "ALL"
 
 filter: "HIGH"
 ```
+This filtering is a combined filter of mammalian diversity score and kraken to save as much data as you can in a case of a highly faunal contaminated sample
 
 ---
 ## Requirements
 
-
+- samtools 1.18
+- bedtools v2.25.0
+- Python 3.6.15
 
 ## Required Files
 
@@ -80,7 +83,7 @@ This table should include:
 
 ## Start
 
-### Step 0 – Verify Mapping
+### Before – Verify Mapping
 To ensure your genome is mapped to the modified reference genome corresponding run:
 
 ```bash
@@ -93,7 +96,12 @@ python check_reference_mapping.py
 snakemake run_pipeline --snakefile  SediQuest.smk --configfile config_example.yaml --cores 25
 ```
 
-### Check the output
+### After - Check the output
 
 Plots and Tables are available for you to look at, here is a bried description of them:
 
+- Summary table
+
+- Overall coverage plot
+
+- Kraken coverage plot
