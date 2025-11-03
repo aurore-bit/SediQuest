@@ -103,6 +103,7 @@ Plots and Tables are available for you to look at, here is a bried description o
 - Summary table
 
 | IndexLibID |	N_score | MD_score | probeset | split | mapped | unique | target | kraken_target | deam | kraken_deam | 5CT | 3CT | 5CT_95CI | 3CT_95CI | cond5CT | cond3CT | cond5CT_95CI | cond3CT_95CI | average_dup | SNPs_count_target | SNPs_count_deam | Contamination | Contamination_err_estimate
+|--------|-----|-------------|-------------|--------|-----|-------------|-------------|--------|-----|-------------|-------------|
 
 - Overall coverage plot
 
