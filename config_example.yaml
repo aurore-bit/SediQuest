@@ -1,30 +1,32 @@
 ###Config file example for SediQuest###
 
-prefix: overview_output
+#put your output directory
+prefix: output
 
-# path to sample table (indexlibid, probeset, seqrun, etc)
-samples_info: config/overview.esquilleu.csv
+# path to sample table (indexlibid, probeset)
+samples_info: config/samples.csv
 
 #path to probeset sheet (probeset, path_to_ref, path_to_bed, path_to_control)
 probeset_info: config/probeset.csv
 
-#project folder
-project: overview_output
+#put your output directory
+project: output
 
 #mammalian diversity score (if you don't want to use it set it to ALL)
-score_b: [5]
+score_b: "ALL"
 
 #n score (if you don't want to use it set it to ALL)
 score_n: "ALL"
 
-#kraken group to extract here Primates
+#kraken group to extract here Primates you should check the kraken group in your taxonomy file from kraken database
 kraken_group_name: "Primates"
 kraken_group: 9443
 
 #kraken database
-kraken_db: /mnt/ramdisk/refseqReleaseKraken
+kraken_db: /db/directory
 
+#####This is an experimental filter set to HIGH after investigating your data#####
 #If you want to save as much data as you can set this to HIGH this is only useful after looking at your summary and putting a mammalian diversity score value on 
-filter: "HIGH"
+filter: "LOW"
 
 
