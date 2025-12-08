@@ -56,7 +56,7 @@ kraken_cumulatif_target <- classification_kraken_byread_target %>%
   filter(!is.na(read_id)) %>%
   filter(!is.na(level_1)) %>%
   mutate(n_3 = as.factor(n_3)) %>%
-  filter(n_3 == 3) %>%
+ # filter(n_3 == 3) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(read_id, level_1, n_3, b_3) %>%
   group_by(b_3, n_3) %>%
@@ -79,7 +79,7 @@ kraken_read_count_target <-  classification_kraken_byread_target %>%
   filter(!is.na(read_id)) %>%
   filter(!is.na(level_1)) %>%
   mutate(n_3 = as.factor(n_3)) %>%
-  filter(n_3==3) %>%
+ # filter(n_3==3) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(read_id, level_1, n_3, b_3) %>%
   group_by(b_3, n_3, level_1) %>%
@@ -146,7 +146,7 @@ kraken_cumulatif_deam <- classification_kraken_byread_deam%>%
   filter(!is.na(read_id)) %>%
   filter(!is.na(level_1)) %>%
   mutate(n_3 = as.factor(n_3)) %>%
-  filter(n_3 == 3) %>%
+ # filter(n_3 == 3) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(read_id, level_1, n_3, b_3) %>%
   group_by(b_3, n_3) %>%
@@ -169,7 +169,7 @@ kraken_read_count_deam <-  classification_kraken_byread_deam %>%
   filter(!is.na(read_id)) %>%
   filter(!is.na(level_1)) %>%
   mutate(n_3 = as.factor(n_3)) %>%
-  filter(n_3==3) %>%
+#  filter(n_3==3) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(read_id, level_1, n_3, b_3) %>%
   group_by(b_3, n_3, level_1) %>%
@@ -242,7 +242,7 @@ kraken_cumulatif_fam_spe_target <- kraken_target %>%
   filter(!is.na(read_id)) %>%
   filter(!is.na(level_2)) %>%
   mutate(n_3 = as.factor(n_3)) %>%
-  filter(n_3 == 3) %>%
+  #filter(n_3 == 3) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(read_id, level_2, n_3, b_3) %>%
   group_by(b_3, n_3) %>%
@@ -266,7 +266,7 @@ kraken_read_count_fam_spe_target <-  kraken_target %>%
   filter(!is.na(read_id)) %>%
   filter(!is.na(level_2)) %>%
   mutate(n_3 = as.factor(n_3)) %>%
-  filter(n_3==3) %>%
+  #filter(n_3==3) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(read_id, level_2, n_3, b_3) %>%
   group_by(b_3, n_3, level_2) %>%
@@ -343,7 +343,7 @@ kraken_cumulatif_fam_spe_deam <- kraken_deam %>%
   filter(!is.na(read_id)) %>%
   filter(!is.na(level_2)) %>%
   mutate(n_3 = as.factor(n_3)) %>%
-  filter(n_3 == 3) %>%
+ # filter(n_3 == 3) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(read_id, level_2, n_3, b_3) %>%
   group_by(b_3, n_3) %>%
@@ -367,7 +367,7 @@ kraken_read_count_fam_spe_deam <-  kraken_deam %>%
   filter(!is.na(read_id)) %>%
   filter(!is.na(level_2)) %>%
   mutate(n_3 = as.factor(n_3)) %>%
-  filter(n_3==3) %>%
+  #filter(n_3==3) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   select(read_id, level_2, n_3, b_3) %>%
   group_by(b_3, n_3, level_2) %>%

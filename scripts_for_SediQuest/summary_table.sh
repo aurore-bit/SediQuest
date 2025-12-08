@@ -82,5 +82,5 @@ $primates_deam \
 $(cat "$count") \
 $(cat "$count_deam") \
 "$contamination" \
-"$err_estimate" \
-tr ' ' '\t' >> $tmp
+"$err_estimate" 
+| tr ' ' '\t' >> $tmp

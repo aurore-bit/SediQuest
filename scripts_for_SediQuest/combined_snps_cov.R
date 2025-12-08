@@ -31,10 +31,11 @@ burden_number <- burden %>%
 #coverage
 coverage <- fread(coverage_path, header = FALSE) %>%
   select(V1, V2, V4) %>%
-  rename(pos = V2,
+  rename(chrom = V1,
+         pos = V2,
          coverage = V4) %>%
   filter(coverage > 0) %>%
-  left_join(burden, by = "pos")  %>%
+  left_join(burden, by = c("chrom","pos"))  %>%
   filter(b_3 != ".") %>%
   filter(!is.na(b_3)) %>%
   filter(!is.na(coverage)) %>%
