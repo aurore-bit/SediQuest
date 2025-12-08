@@ -229,12 +229,12 @@ rule deam_filter:
 
 rule read_id_filter:
     input:
-        burden_filter = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.read_summary.txt.gz",
-        kraken_info = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.byread",
-        burden_all = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_ALL/N_score_ALL/{indexlibid}.uniq.L35MQ25_MDALL_NALL.read_summary.txt.gz",
-        burden_filter_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.read_summary.txt.gz",
-        kraken_info_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.byread",
-        burden_all_deam =  "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_ALL/N_score_ALL/deam/{indexlibid}.uniq.L35MQ25_MDALL_NALL.deam.read_summary.txt.gz"
+        burden_filter = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_ALL/N_score_ALL/{indexlibid}.uniq.L35MQ25_MDALL_NALL.read_summary.txt.gz",
+        kraken_info = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_ALL/N_score_ALL/kraken/{indexlibid}.byread",
+        burden_all = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.read_summary.txt.gz",
+        burden_filter_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_ALL/N_score_ALL/deam/{indexlibid}.uniq.L35MQ25_MDALL_NALL.deam.read_summary.txt.gz",
+        kraken_info_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_ALL/N_score_ALL/deam/kraken/{indexlibid}.byread",
+        burden_all_deam =  "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.read_summary.txt.gz"
     output: 
         read_to_filter = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/reads_to_filter_MD{score_b}_N{score_n}.txt",
         read_to_filter_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/deam/reads_to_filter_MD{score_b}_N{score_n}.txt"
@@ -253,8 +253,8 @@ rule extract_reads:
         bam_filter = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_K{kraken_group_name}_filterON.bam",
         bam_filter_deam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_K{kraken_group_name}.deam_filterON.bam"
     shell: """
-        samtools view -N {input.read_to_filter} -b {input.bam} -o {output.bam_filter}
-        samtools view -N {input.read_to_filter_deam} -b {input.bam} -o {output.bam_filter_deam}
+        /mnt/expressions/yaniv/Software/samtools-1.17/samtools view -N {input.read_to_filter} -b {input.bam} -o {output.bam_filter}
+        /mnt/expressions/yaniv/Software/samtools-1.17/samtools view -N {input.read_to_filter_deam} -b {input.bam} -o {output.bam_filter_deam}
         """
 
 ##############################################
@@ -393,24 +393,43 @@ rule generic_kraken_extract_before_deam:
 rule cov_bed_files:
     input: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam"
     output:
-            cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.cov",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.count"
+            cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.cov"
     shell:"""
             samtools mpileup -B {input} > {output.cov}
-            awk '$4 != 0' {output.cov} | wc -l > {output.count}
             """
 
+rule count_SNPs:
+    input: 
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
+        bed=get_control
+    output: 
+        count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.count",
+        temp=temp("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.covbed")
+    shell: """
+        samtools mpileup -B -l {input.bed} {input.bam} > {output.temp}
+        awk '$4 != 0' {output.temp} | wc -l > {output.count}
+        """
 
 #get coverage also for deaminated reads
 rule cov_bed_files_deam:
     input: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam"
     output:
             cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.cov",
-            count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.count"
-    shell:"""
+     shell:"""
             samtools mpileup -B {input} > {output.cov}
-            awk '$4 != 0' {output.cov} | wc -l > {output.count}
             """
+
+rule count_SNPs_deam:
+    input: 
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam",
+        bed=get_control
+    output: 
+        count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.count",
+        temp=temp("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.covbed")
+    shell: """
+        samtools mpileup -B -l {input.bed} {input.bam} > {output.temp}
+        awk '$4 != 0' {output.temp} | wc -l > {output.count}
+        """
 
 
 #give an estimate of the contamination
