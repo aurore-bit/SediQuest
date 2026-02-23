@@ -67,6 +67,7 @@ def get_control_info(wildcards):
 #A rule for everything
 ##############################################
 
+
 wildcard_constraints:
     score_n="[^/]+"
 
@@ -75,6 +76,7 @@ Final_bam = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/
          for indexlibid, probesets in INDEXLIBID.items()
          for probeset in probesets],
          score_b=score_b)
+
 
 bam_filterON = expand([f"{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/combined_filter/{indexlibid}.uniq.L35MQ25_MD{{score_b}}_N{score_n}_K{kraken_group_name}_filterON.bam"
          for indexlibid, probesets in INDEXLIBID.items()
@@ -157,9 +159,9 @@ rule run_pipeline:
         Kraken_split_bam=Kraken_split_bam,
         summary_table=summary_table,
         cov_plot=faunal_contam,
-        kraken_plot=kraken_plot
+       # kraken_plot=kraken_plot
     run:
-        print('Hello! The pipeline is running')
+        print('Hello! The pipeline has finished, have a look at the results :)')
         pass
 
 
@@ -301,7 +303,7 @@ rule generic_kraken:
     threads: 1
     conda: "envs/kraken.yaml"
     shell: """
-    kraken --threads {threads} --db {config[kraken_db]} \
+    /projects1/tools_new/kraken/eaf8fb6/kraken --threads {threads} --db {config[kraken_db]} \
     --output {output.kraken} {input.fa} 2>> {log}
     """
 
@@ -380,6 +382,8 @@ rule generic_kraken_extract_before_deam:
     python3 scripts_for_SediQuest/kraken_report.py --db {config[kraken_db]} {input.kraken} --extractFile {input.bam} \
        --clades {config[kraken_group]} --extract-out-base $ofile  > /dev/null
 
+    #How to solve the issue of empty bam file if no primates
+
     """
 
 
@@ -388,6 +392,7 @@ rule generic_kraken_extract_before_deam:
 ##############################################
 #summary
 ##############################################
+
 
 #create coverage file for on target reads
 rule cov_bed_files:
@@ -403,11 +408,11 @@ rule count_SNPs:
         bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
         bed=get_control
     output: 
-        count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.count",
+        count_file="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.count",
         temp=temp("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.covbed")
     shell: """
         samtools mpileup -B -l {input.bed} {input.bam} > {output.temp}
-        awk '$4 != 0' {output.temp} | wc -l > {output.count}
+        awk '$4 != 0' {output.temp} | wc -l > {output.count_file}
         """
 
 #get coverage also for deaminated reads
@@ -415,22 +420,45 @@ rule cov_bed_files_deam:
     input: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam"
     output:
             cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.cov",
-     shell:"""
-            samtools mpileup -B {input} > {output.cov}
-            """
+    shell:"""
+        samtools mpileup -B {input} > {output.cov}
+        """
+
+#get coverage also for deaminated reads kraken filtered
+rule count_SNPs_deam_kraken:
+    input: 
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_K{kraken_group_name}.bam",
+        bed=get_control
+    output: 
+        count_file="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_K{kraken_group_name}.count",
+        temp=temp("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_K{kraken_group_name}.covbed")
+    shell: """
+        samtools mpileup -B -l {input.bed} {input.bam} > {output.temp}
+        awk '$4 != 0' {output.temp} | wc -l > {output.count_file}
+        """
+
 
 rule count_SNPs_deam:
     input: 
         bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.bam",
         bed=get_control
     output: 
-        count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.count",
+        count_file="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.count",
         temp=temp("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.covbed")
     shell: """
         samtools mpileup -B -l {input.bed} {input.bam} > {output.temp}
-        awk '$4 != 0' {output.temp} | wc -l > {output.count}
+        awk '$4 != 0' {output.temp} | wc -l > {output.count_file}
         """
 
+#estimate the MD score
+#rule MD_score:
+   # input: 
+    #    cov="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.cov",
+   #    burden=get_bed,
+  #  output: "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.MD"
+   # shell: """
+     #   Rscript scripts_for_SediQuest/MD_estimate.R {input.cov} {input.burden} {output}
+     #   """
 
 #give an estimate of the contamination
 rule contamination_estimaTe:
@@ -438,8 +466,35 @@ rule contamination_estimaTe:
         bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam"
     output:
         bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.authentict"
+    shell:
+        r"""
+        nreads=$(samtools view -c {input.bam})
+        if [ "$nreads" -gt 10000 ]; then
+            samtools view {input.bam} | \
+            AuthentiCT deam2cont -o {output.bam} -s 10000 -
+        else
+            echo "0" > {output.bam}
+        fi
+        """
+
+#calculate the faunal contamination
+rule contamination_faunal_estimaTe:
+    input: 
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.translate"
+    output:
+        contam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.FaunalContam"
     shell: """
-            samtools view {input.bam} | AuthentiCT deam2cont -o {output.bam} -s 10000 -
+            Rscript scripts_for_SediQuest/FaunalContaminationEstimate.r {input.bam} {output.contam}
+            """
+
+
+rule contamination_faunal_estimaTe_deam:
+    input: 
+        bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.translate"
+    output:
+        contam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.FaunalContam"
+    shell: """
+            Rscript scripts_for_SediQuest/FaunalContaminationEstimate.r {input.bam} {output.contam}
             """
 
 
@@ -465,14 +520,20 @@ rule pipeline_summary:
         split_kraken_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_KPrimates.bam",
         summary_unique="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/summary_stats.uniq.L35MQ25.txt",
         deam_stats="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam_stats/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.summary_damage.txt",
-        count="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.count",
+        count_file="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.count",
         count_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam.count",
-        contam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.authentict"
+        count_deam_kraken="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_KPrimates.count",
+        contam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.authentict",
+        #MD="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.MD",
+        faunal="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.FaunalContam",
+        faunal_deam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/kraken/{indexlibid}.FaunalContam"
     output:
         summary_annotated="{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.pipeline_summary.txt",
+    params:
+        summary_unique="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/summary_stats.uniq.L35MQ25.txt",
     shell:
         """
-        bash scripts_for_SediQuest/summary_table.sh {input.map_bam} {input.rmdup_bam} {input.target_bam} {input.deam_bam} {input.split_kraken} {input.split_kraken_deam} {input.deam_stats} {input.summary_unique} {input.contam} {input.count} {input.count_deam} {output.summary_annotated} {input.split_bam}  {wildcards.indexlibid} {wildcards.score_n} {wildcards.score_b} {wildcards.probeset} 
+        bash scripts_for_SediQuest/summary_table.sh {input.map_bam} {input.rmdup_bam} {input.target_bam} {input.deam_bam} {input.split_kraken} {input.split_kraken_deam} {input.deam_stats} {input.summary_unique} {input.contam} {input.count_file} {input.count_deam} {input.count_deam_kraken} {output.summary_annotated} {input.split_bam}  {wildcards.indexlibid} {wildcards.score_n} {wildcards.score_b} {wildcards.probeset} {input.faunal} {input.faunal_deam}
         """
 
 
@@ -540,7 +601,6 @@ rule plot_cov_snps:
         "{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}_cov_MD.pdf"
     params:
         output_dir="{project}_summary/{indexlibid}/{probeset}/Mam_div_score_{score_b}/N_score_{score_n}/"
-    run:
-        shell(f"""
-			Rscript scripts_for_SediQuest/combined_snps_cov.R {input.cov} {input.burden} {params.output_dir}  
-		""")
+    shell:"""
+		Rscript scripts_for_SediQuest/combined_snps_cov.R {input.cov} {input.burden} {params.output_dir}  
+		"""
