@@ -1,5 +1,5 @@
 
-#TO HAVE COVERAGE ACCROSS BURDEN SCORES#
+#TO HAVE MD score ACCROSS BURDEN SCORES#
 
 library(knitr)
 library(data.table)
@@ -7,19 +7,20 @@ library(tidyverse)
 library(gridExtra)
 library(ggplot2)
 
+#install.packages("soiltestcorr")
+
+library(soiltestcorr)
+
+
+
 args <- commandArgs(trailingOnly = TRUE)
 coverage_path <- args[1]
 burden_path <- args[2]
 dir_to_save <- args[3]
 
-indexlibid <- sub("^([^/]+)/([^/]+)/.*$", "\\2", dir_to_save)
-
-
 burden <- fread(burden_path) %>%
   select(chrom, pos0, pos, b_3) %>%
-  mutate(chrom = as.character(chrom))
-
-
+ mutate(chrom = as.character(chrom))
 
 burden_number <- burden %>%
   select(pos, b_3) %>%
@@ -36,8 +37,8 @@ coverage <- fread(coverage_path, header = FALSE) %>%
   rename(chrom = V1,
          pos = V2,
          coverage = V4) %>%
-  mutate(chrom = as.character(chrom)) %>%
   filter(coverage > 0) %>%
+   mutate(chrom = as.character(chrom)) %>%
   left_join(burden, by = c("chrom","pos"))  %>%
   filter(b_3 != ".") %>%
   filter(!is.na(b_3)) %>%
@@ -48,34 +49,40 @@ coverage <- fread(coverage_path, header = FALSE) %>%
   summarise(total_coverage = sum(coverage), .groups = 'drop') %>%
   left_join(burden_number, by = c("b_3")) %>%
   group_by(b_3) %>%
-  mutate(total_coverage = total_coverage/count) %>%
+  mutate(total = total_coverage/count) %>%
   mutate(b_3 = as.numeric(as.character(b_3))) %>%
   filter(b_3 < 30) 
 
 
+safe_quadratic_plateau <- function(coverage, b_3, total) {
+  tryCatch(
+    quadratic_plateau(coverage, b_3, total, tidy = TRUE),
+    error = function(e) {
+      tibble(
+        STVt = NA_character_
+      )
+    }
+  )
+}
 
-data <- coverage %>%
-  #left_join(burden_number, by = c("b_3", "n_3", "count"))
-  left_join(burden_number, by = c("b_3"))
-
-
-# plot coverage and number of SNPs
-comb_cov_snps <- ggplot(data) +
-  geom_line(aes(x = b_3, y = total_coverage)) +
-  labs(x = "Mammalian diversity Score") +
-  theme(
- #   axis.title.y = element_text(color = "blue", size = 13),  # Left axis title (Coverage)
-  #  axis.title.y.right = element_text(color = "red", size = 13),  # Right axis title (burden_SNPs)
-    axis.text = element_text(size = 12),  # Axis text size
-    axis.title.x = element_text(size = 13)  # X-axis title size
-  ) +
-  labs(
-    x = "MD score",
-    y = "Coverage",
-   )+
- ggtitle("Coverage by Mammalian diversity score")  +
-  coord_cartesian(xlim = c(0,30),ylim = c(0,1))
+table_qp <- safe_quadratic_plateau(coverage, b_3, total)
 
 
-path_to_save <- paste0(dir_to_save, indexlibid,"_cov_MD.pdf")
-ggsave(path_to_save, plot = comb_cov_snps, device = "pdf")
+
+MD_value <- table_qp %>%
+  mutate(
+    STVt_num = as.numeric(STVt),  # convert once
+    MD_value = case_when(
+      is.na(STVt_num) ~ NA_real_,  # keep NA
+      STVt_num > 30 ~ 0,           # if >30, return 0
+      TRUE ~ ceiling(STVt_num)     # otherwise ceiling
+    )
+  ) %>%
+  select(MD_value)
+
+write.table(MD_value, dir_to_save, 
+            col.names = FALSE,
+            row.names = FALSE, 
+            sep = "\t", 
+            quote = FALSE,
+            na = "NA")

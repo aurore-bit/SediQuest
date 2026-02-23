@@ -22,13 +22,14 @@ summary_unique="$8"
 contam="$9"
 count="${10}"
 count_deam="${11}"
-summary_annotated="${12}"
-
-
-indexlibid="${14}"
-score_n="${15}"
-score_b="${16}"
-probeset="${17}"
+count_deam_kraken="${12}"
+summary_annotated="${13}"
+faunal="${19}"
+faunal_deam="${20}"
+indexlibid="${15}"
+score_n="${16}"
+score_b="${17}"
+probeset="${18}"
 
 
 # Get read counts for each input BAM file
@@ -50,16 +51,16 @@ deam_cond5CT_95CI=$(awk 'NR==2 {{print $10}}' "$deam_stats")
 deam_cond3CT_95CI=$(awk 'NR==2 {{print $11}}' "$deam_stats")
     
      # Get %unique and %exhausted from exhaustion file
-average_dup=$(awk 'NR==2 {{print $11}}' "$summary_unique")
+average_dup=$(awk 'NR==2 {{print $10}}' "$summary_unique")
 
         #get contamination estimate
-contamination=$(awk 'NR==8 {{print $2}}' "$contam")
-err_estimate=$(awk 'NR==8 {{print $3}}' "$contam")
+contamination=$(awk 'NR==1 {first=$0} NR==8 {line8=$2} END {if(first==0) print 0; else print line8}' "$contam")
+err_estimate=$(awk 'NR==1 {first=$0} NR==8 {line8=$3} END {if(first==0) print 0; else print line8}' "$contam")
 
 tmp="$summary_annotated"
 
         # Write header to the summary file
-echo IndexLibID N_score MD_score probeset split mapped unique target kraken_target deam kraken_deam 5'CT 3'CT 5'CT_95CI 3'CT_95CI cond5'CT cond3'CT cond5'CT_95CI cond3'CT_95CI average_dup SNPs_count_target SNPs_count_deam Contamination Contamination_err_estimate | tr ' ' '\t' > $tmp
+echo IndexLibID N_score MD_score probeset split mapped unique target kraken_target deam kraken_deam 5'CT 3'CT 5'CT_95CI 3'CT_95CI cond5'CT cond3'CT cond5'CT_95CI cond3'CT_95CI average_dup SNPs_count_target SNPs_count_deam Contamination Contamination_err_estimate Faunal_contamination Faunal_contamination_deam | tr ' ' '\t' > $tmp
 
         # Append the values for each field to the summary file
 echo "$indexlibid" "$score_n" "$score_b" "$probeset" \
@@ -81,6 +82,9 @@ $primates_deam \
 "$average_dup" \
 $(cat "$count") \
 $(cat "$count_deam") \
+$(cat "$count_deam_kraken") \
 "$contamination" \
-"$err_estimate" 
+"$err_estimate" \
+$(cat "$faunal") \
+$(cat "$faunal_deam") \
 | tr ' ' '\t' >> $tmp
