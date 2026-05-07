@@ -34,7 +34,7 @@ kraken_group = config["kraken_group"]
 kraken_group_name = config["kraken_group_name"]
 
 # Read the indexlibid information
-indexlibid_df = pd.read_csv(config["samples_info"], comment="#", sep=";")
+indexlibid_df = pd.read_csv(config["samples_info"], comment="#", sep=",")
 INDEXLIBID = indexlibid_df.groupby('indexlibid')['probeset_to_lib'].apply(list).to_dict()
 
 
@@ -212,11 +212,13 @@ rule filter_bam_by_control_sites:
     output:
         sites_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
         bai="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bai",
+        duplication_rate="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.duprate",
     threads: 1
     #conda: "envs/processing.yaml"
     shell: """
         bedtools intersect -a {input.bam} -b {input.sites_filtered} > {output.sites_bam} 
         samtools index {output.sites_bam} {output.bai}
+        python scripts_for_SediQuest/duplication_rate.py --bam {output.sites_bam} --output {output.duplication_rate}
     """
 
 rule deam_filter:
@@ -361,7 +363,9 @@ rule generic_kraken_extract_after_deam:
     ofile=$(dirname {output.bam})/$(basename {output.bam} .bam)
 
     python3 scripts_for_SediQuest/kraken_report.py --db {config[kraken_db]} {input.kraken} --extractFile {input.bam} \
-       --clades {config[kraken_group]} --extract-out-base $ofile   > /dev/null
+       --clades {config[kraken_group]} --extract-out-base $ofile   > /dev/null 2>&1
+
+    touch {output.bam}
 
     """
 
@@ -374,15 +378,20 @@ rule generic_kraken_extract_before_deam:
     input: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
            kraken = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.kraken",
            translate = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/kraken/{indexlibid}.translate"
-    output: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_K{kraken_group_name}.bam"
+    output: bam = "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_K{kraken_group_name}.bam",
+            dup =  "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_K{kraken_group_name}.duprate"
     threads: 1
     shell: """
     ofile=$(dirname {output.bam})/$(basename {output.bam} .bam)
 
     python3 scripts_for_SediQuest/kraken_report.py --db {config[kraken_db]} {input.kraken} --extractFile {input.bam} \
-       --clades {config[kraken_group]} --extract-out-base $ofile  > /dev/null
+       --clades {config[kraken_group]} --extract-out-base $ofile  > /dev/null 2>&1
 
     #How to solve the issue of empty bam file if no primates
+
+    touch {output.bam}
+
+    python scripts_for_SediQuest/duplication_rate.py --bam {output.bam} --output {output.dup}
 
     """
 
@@ -433,7 +442,7 @@ rule count_SNPs_deam_kraken:
         count_file="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_K{kraken_group_name}.count",
         temp=temp("{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/deam/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.deam_K{kraken_group_name}.covbed")
     shell: """
-        samtools mpileup -B -l {input.bed} {input.bam} > {output.temp}
+        samtools mpileup -B -l {input.bed} {input.bam} > {output.temp} 2> /dev/null || touch {output.temp}
         awk '$4 != 0' {output.temp} | wc -l > {output.count_file}
         """
 
@@ -511,6 +520,8 @@ rule deam_stats_table:
 #create the summary table
 rule pipeline_summary:
     input:
+        duplication_rate="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.duprate",
+        duplication_rate_kraken= "{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/split_kraken/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}_KPrimates.duprate",
         split_bam="{project}/split/{indexlibid}/{probeset}/{indexlibid}.bam",
         map_bam="{project}/mappedbams/{indexlibid}/{probeset}/{indexlibid}.bam",
         target_bam="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/target/Mam_div_score_{score_b}/N_score_{score_n}/{indexlibid}.uniq.L35MQ25_MD{score_b}_N{score_n}.bam",
@@ -533,7 +544,7 @@ rule pipeline_summary:
         summary_unique="{project}/mappedbams/{indexlibid}/{probeset}/rmdupL35MQ25/summary_stats.uniq.L35MQ25.txt",
     shell:
         """
-        bash scripts_for_SediQuest/summary_table.sh {input.map_bam} {input.rmdup_bam} {input.target_bam} {input.deam_bam} {input.split_kraken} {input.split_kraken_deam} {input.deam_stats} {input.summary_unique} {input.contam} {input.count_file} {input.count_deam} {input.count_deam_kraken} {output.summary_annotated} {input.split_bam}  {wildcards.indexlibid} {wildcards.score_n} {wildcards.score_b} {wildcards.probeset} {input.faunal} {input.faunal_deam}
+        bash scripts_for_SediQuest/summary_table.sh {input.map_bam} {input.rmdup_bam} {input.target_bam} {input.deam_bam} {input.split_kraken} {input.split_kraken_deam} {input.deam_stats} {input.summary_unique} {input.contam} {input.count_file} {input.count_deam} {input.count_deam_kraken} {output.summary_annotated} {input.split_bam}  {wildcards.indexlibid} {wildcards.score_n} {wildcards.score_b} {wildcards.probeset} {input.faunal} {input.faunal_deam} {input.split_bam} {input.duplication_rate} {input.duplication_rate_kraken}
         """
 
 
